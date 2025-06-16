@@ -1,4 +1,4 @@
-package com.example.a66sms
+package com.example.a66text
 
 import org.junit.Test
 

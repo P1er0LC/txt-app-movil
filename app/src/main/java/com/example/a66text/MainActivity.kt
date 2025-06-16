@@ -1,4 +1,4 @@
-package com.example.a66sms
+package com.example.a66text
 
 import android.Manifest
 import android.app.Activity
@@ -17,24 +17,24 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Log.d("66sms", "MainActivity started")
+        Log.d("66text", "MainActivity started")
 
         val text_view = TextView(this)
-        text_view.text = "66sms is running"
+        text_view.text = "66text is running"
         setContentView(text_view)
 
         request_sms_permission()
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Log.d("66sms", "Starting foreground service")
+                Log.d("66text", "Starting foreground service")
                 startForegroundService(Intent(this, SmsService::class.java))
             } else {
-                Log.d("66sms", "Starting regular service")
+                Log.d("66text", "Starting regular service")
                 startService(Intent(this, SmsService::class.java))
             }
         } catch (ex: Exception) {
-            Log.e("66sms", "Service start failed: ${ex.message}")
+            Log.e("66text", "Service start failed: ${ex.message}")
         }
     }
 

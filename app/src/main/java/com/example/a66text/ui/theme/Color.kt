@@ -1,4 +1,4 @@
-package com.example.a66sms.ui.theme
+package com.example.a66text.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

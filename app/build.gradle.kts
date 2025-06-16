@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.a66sms"
+    namespace = "com.example.a66text"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.a66sms"
+        applicationId = "com.example.a66text"
         minSdk = 29
         targetSdk = 35
         versionCode = 1

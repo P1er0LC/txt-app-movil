@@ -1,4 +1,4 @@
-package com.example.a66sms
+package com.example.a66text
 
 import android.app.*
 import android.content.Context
@@ -31,8 +31,8 @@ class SmsService : Service() {
     }
 
     private fun start_foreground() {
-        val channel_id = "66sms_channel"
-        val channel_name = "66sms Service"
+        val channel_id = "66text_channel"
+        val channel_name = "66text Service"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(channel_id, channel_name, NotificationManager.IMPORTANCE_LOW)
@@ -42,13 +42,13 @@ class SmsService : Service() {
 
         val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, channel_id)
-                .setContentTitle("66sms Running")
+                .setContentTitle("66text Running")
                 .setContentText("Polling your server...")
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .build()
         } else {
             Notification.Builder(this)
-                .setContentTitle("66sms Running")
+                .setContentTitle("66text Running")
                 .setContentText("Polling your server...")
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .build()
@@ -58,7 +58,7 @@ class SmsService : Service() {
     }
 
     private fun start_polling() {
-        Log.d("66sms", "Polling function started")
+        Log.d("66text", "Polling function started")
         val url = "https://webhook.site/38961d29-c516-4dde-947e-11892351651a"
 
         polling_timer = fixedRateTimer(
@@ -67,10 +67,10 @@ class SmsService : Service() {
             period = polling_interval_ms
         ) {
             try {
-                Log.d("66sms", "Sending HTTP request to $url") /* comment */
+                Log.d("66text", "Sending HTTP request to $url") /* comment */
                 val request = Request.Builder().url(url).build()
                 val response = http_client.newCall(request).execute()
-                Log.d("66sms", "Received response: ${response.code}")
+                Log.d("66text", "Received response: ${response.code}")
 
                 val json_string = response.body?.string() ?: return@fixedRateTimer
                 val json = JSONObject(json_string)
@@ -83,7 +83,7 @@ class SmsService : Service() {
                     send_sms(phone_number, message_text)
                 }
             } catch (ex: Exception) {
-                Log.e("66sms", "Polling failed: ${ex.message}")
+                Log.e("66text", "Polling failed: ${ex.message}")
             }
         }
     }
@@ -92,9 +92,9 @@ class SmsService : Service() {
         try {
             val sms = SmsManager.getDefault()
             sms.sendTextMessage(phone_number, null, message_text, null, null)
-            Log.d("66sms", "SMS sent to $phone_number")
+            Log.d("66text", "SMS sent to $phone_number")
         } catch (e: Exception) {
-            Log.e("66sms", "Failed to send SMS: ${e.message}")
+            Log.e("66text", "Failed to send SMS: ${e.message}")
         }
     }
 
