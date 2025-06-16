@@ -14,17 +14,17 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var shared_preferences: SharedPreferences
 
     override fun onCreate(bundle: Bundle?) {
-        shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
-        if (
-            !shared_preferences.getString("pref_api_key", "").isNullOrEmpty() &&
-            !shared_preferences.getString("pref_site_url", "").isNullOrEmpty()
-        ) {
-            /* credentials already exist, skip login */
-            val main_activity_intent = Intent(this, MainActivity::class.java)
-            startActivity(main_activity_intent)
-            finish()
-            return
-        }
+//        shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+//        if (
+//            !shared_preferences.getString("pref_api_key", "").isNullOrEmpty() &&
+//            !shared_preferences.getString("pref_site_url", "").isNullOrEmpty()
+//        ) {
+//            /* credentials already exist, skip login */
+//            val main_activity_intent = Intent(this, MainActivity::class.java)
+//            startActivity(main_activity_intent)
+//            finish()
+//            return
+//        }
 
         super.onCreate(bundle)
         setContentView(R.layout.activity_login)
