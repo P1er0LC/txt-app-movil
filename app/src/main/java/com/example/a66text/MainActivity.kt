@@ -17,6 +17,18 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val api_key = shared_preferences.getString("pref_api_key", "")
+        val site_url = shared_preferences.getString("pref_site_url", "")
+
+        if (api_key.isNullOrEmpty() || site_url.isNullOrEmpty()) {
+            Toast.makeText(this, "Missing API key or site URL. Please log in.", Toast.LENGTH_LONG).show()
+            val login_intent = Intent(this, LoginActivity::class.java)
+            startActivity(login_intent)
+            finish()
+            return
+        }
+
         Log.d("66text", "MainActivity started")
 
         val text_view = TextView(this)
