@@ -3,19 +3,22 @@ package com.example.a66text
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.IBinder
 import android.telephony.SmsManager
 import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.*
 import kotlin.concurrent.fixedRateTimer
 
 class SmsService : Service() {
 
-    private val polling_interval_ms: Long = 10000
+    private val polling_interval_ms: Long = 10000000
+    //private val polling_interval_ms: Long = 10000
     private var polling_timer: Timer? = null
     private val http_client = OkHttpClient()
 
@@ -59,7 +62,12 @@ class SmsService : Service() {
 
     private fun start_polling() {
         Log.d("66text", "Polling function started")
-        val url = "https://webhook.site/38961d29-c516-4dde-947e-11892351651a"
+
+        /* load user-configured endpoint */
+        val prefs: SharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val siteUrl = prefs.getString("pref_site_url", "")!!.trimEnd('/')
+        val apiKey = prefs.getString("pref_api_key", "")!!
+        val url = "$siteUrl/api/sms?api_key=$apiKey"
 
         polling_timer = fixedRateTimer(
             name = "sms_polling_timer",
@@ -74,13 +82,15 @@ class SmsService : Service() {
 
                 val json_string = response.body?.string() ?: return@fixedRateTimer
                 val json = JSONObject(json_string)
-                val messages = json.getJSONArray("messages")
+                val data_object = json.getJSONObject("data")
+                val messages_array = JSONArray().put(data_object.getJSONObject("messages"))
 
-                for (i in 0 until messages.length()) {
-                    val obj = messages.getJSONObject(i)
-                    val phone_number = obj.getString("phone_number")
-                    val message_text = obj.getString("message_text")
-                    send_sms(phone_number, message_text)
+                for (i in 0 until messages_array.length()) {
+                    val message_object = messages_array.getJSONObject(i)
+                    val phone_number = message_object.getString("phone_number")
+                    val text = message_object.getString("text")
+
+                    send_sms(phone_number, text)
                 }
             } catch (ex: Exception) {
                 Log.e("66text", "Polling failed: ${ex.message}")
@@ -88,10 +98,10 @@ class SmsService : Service() {
         }
     }
 
-    private fun send_sms(phone_number: String, message_text: String) {
+    private fun send_sms(phone_number: String, text: String) {
         try {
             val sms = SmsManager.getDefault()
-            sms.sendTextMessage(phone_number, null, message_text, null, null)
+            sms.sendTextMessage(phone_number, null, text, null, null)
             Log.d("66text", "SMS sent to $phone_number")
         } catch (e: Exception) {
             Log.e("66text", "Failed to send SMS: ${e.message}")
