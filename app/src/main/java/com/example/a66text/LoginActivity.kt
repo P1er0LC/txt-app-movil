@@ -42,17 +42,40 @@ class LoginActivity : AppCompatActivity() {
             val site_url = siteUrlInput.text.toString()
             val device_id = device_id_input.text.toString()
 
-            /* save credentials */
-            shared_preferences.edit()
-                .putString("pref_api_key", api_key)
-                .putString("pref_site_url", site_url)
-                .putString("pref_device_id", device_id)
-                .apply()
+            val link_url = "$site_url/api/devices/$device_id/link"
+            Thread {
+                try {
+                    val url = java.net.URL(link_url)
+                    val connection = url.openConnection() as java.net.HttpURLConnection
+                    connection.requestMethod = "POST"
+                    connection.setRequestProperty("Authorization", "Bearer $api_key")
+                    connection.connectTimeout = 5000
+                    connection.readTimeout = 5000
+                    connection.doOutput = true
 
-            Toast.makeText(this, "Connected and service started", Toast.LENGTH_SHORT).show()
-            val main_activity_intent = Intent(this, MainActivity::class.java)
-            startActivity(main_activity_intent)
-            finish()
+                    val response_code = connection.responseCode
+                    runOnUiThread {
+                        if (response_code == 200) {
+                            shared_preferences.edit()
+                                .putString("pref_api_key", api_key)
+                                .putString("pref_site_url", site_url)
+                                .putString("pref_device_id", device_id)
+                                .apply()
+
+                            Toast.makeText(this, "Connected and service started", Toast.LENGTH_SHORT).show()
+                            val main_activity_intent = Intent(this, MainActivity::class.java)
+                            startActivity(main_activity_intent)
+                            finish()
+                        } else {
+                            Toast.makeText(this, "Link failed: $response_code", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (exception: Exception) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Connection error: ${exception.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.start()
         }
     }
 }
