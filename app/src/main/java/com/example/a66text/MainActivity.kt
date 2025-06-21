@@ -1,5 +1,8 @@
 package com.example.a66text
 
+import java.util.Timer
+import kotlin.concurrent.timerTask
+
 import android.Manifest
 import android.app.Activity
 import android.os.Bundle
@@ -11,8 +14,36 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.content.Intent
 import android.util.Log
+import android.widget.Button
+import android.os.Handler
+import android.os.Looper
 
 class MainActivity : Activity() {
+
+    private val poll_handler = Handler(Looper.getMainLooper())
+    private val poll_runnable = object : Runnable {
+        override fun run() {
+            val shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+            val updated_ts = shared_preferences.getLong("pref_last_poll_ts", 0L)
+            findViewById<TextView>(R.id.text_last_poll).text =
+                "Last poll: ${formatTimeAgo(updated_ts)}"
+
+            poll_handler.postDelayed(this, 1000)
+        }
+    }
+
+    fun formatTimeAgo(timestamp: Long): String {
+        if (timestamp == 0L) return "Never"
+        val diff = System.currentTimeMillis() - timestamp
+        val seconds = diff / 1000
+        val minutes = seconds / 60
+        val hours = minutes / 60
+        return when {
+            hours > 0 -> "$hours hour(s) ago"
+            minutes > 0 -> "$minutes minute(s) ago"
+            else -> "$seconds second(s) ago"
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,9 +62,41 @@ class MainActivity : Activity() {
 
         Log.d("66text", "MainActivity started")
 
-        val text_view = TextView(this)
-        text_view.text = "66text is running"
-        setContentView(text_view)
+        setContentView(R.layout.activity_main) /* use XML layout */
+
+        val status_value = findViewById<TextView>(R.id.text_status_value)
+        val last_poll_view = findViewById<TextView>(R.id.text_last_poll)
+        val device_name_view = findViewById<TextView>(R.id.text_device_name)
+        val site_url_view = findViewById<TextView>(R.id.text_site_url)
+        val disconnect_button = findViewById<Button>(R.id.button_disconnect)
+
+        val device_name = shared_preferences.getString("pref_device_name", "Unknown device")
+
+        device_name_view.text = "Device: $device_name"
+        site_url_view.text = "URL: ${site_url ?: ""}"
+        last_poll_view.text = "Last poll: just now"
+
+        val last_poll_timestamp = shared_preferences.getLong("pref_last_poll_ts", 0L)
+
+        poll_handler.post(poll_runnable)
+
+        status_value.text = "Connected"
+        status_value.setTextColor(getColor(android.R.color.holo_green_dark))
+
+        disconnect_button.setOnClickListener {
+            val editor = shared_preferences.edit()
+            editor.remove("pref_api_key")
+            editor.remove("pref_site_url")
+            editor.remove("pref_device_id")
+            editor.remove("pref_device_name")
+            editor.apply()
+
+            poll_handler.removeCallbacks(poll_runnable)
+
+            val login_intent = Intent(this, LoginActivity::class.java)
+            startActivity(login_intent)
+            finish()
+        }
 
         request_sms_permission()
 
@@ -76,5 +139,9 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Missing permissions", Toast.LENGTH_LONG).show()
             }
         }
+    }
+    override fun onDestroy() {
+        super.onDestroy()
+        poll_handler.removeCallbacks(poll_runnable)
     }
 }

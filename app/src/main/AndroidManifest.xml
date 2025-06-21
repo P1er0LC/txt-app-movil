@@ -40,7 +40,7 @@
             android:name="com.example.a66text.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme._66text">
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar">
         </activity>
 
 
