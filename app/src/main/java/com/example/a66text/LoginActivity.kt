@@ -16,6 +16,7 @@ import java.net.URLEncoder /* URL encoder for form data */
 import org.json.JSONObject /* JSON parser */
 import android.telephony.SubscriptionManager /* SIM subscription manager */
 import android.telephony.SubscriptionInfo /* SIM info */
+import android.telephony.TelephonyManager /* to fetch line1Number */
 import java.net.HttpURLConnection
 import java.net.URL
 import android.Manifest /* for permission constants */
@@ -26,7 +27,7 @@ import androidx.core.app.ActivityCompat /* for requestPermissions */
 class LoginActivity : AppCompatActivity() {
 
     companion object {
-        private const val REQUEST_READ_PHONE_STATE = 1001 /* permission request code */
+        private const val REQUEST_PHONE_PERMISSIONS = 1001 /* request READ_PHONE_STATE & READ_PHONE_NUMBERS */
     }
 
     private lateinit var shared_preferences: SharedPreferences
@@ -55,7 +56,19 @@ class LoginActivity : AppCompatActivity() {
         val siteUrlInput: EditText = findViewById(R.id.site_url_input)
         val device_id_input: EditText = findViewById(R.id.device_id_input)
 
-        connectButton.setOnClickListener @androidx.annotation.RequiresPermission(android.Manifest.permission.READ_PHONE_STATE) {
+        connectButton.setOnClickListener linkClick@ {
+            // ensure we have phone permissions before linking
+            val hasState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+            val hasNumber = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_NUMBERS) == PackageManager.PERMISSION_GRANTED
+            if (!hasState || !hasNumber) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_PHONE_NUMBERS),
+                    REQUEST_PHONE_PERMISSIONS
+                ) /* request both permissions */
+                return@linkClick
+            }
+
             val battery_manager = getSystemService(BATTERY_SERVICE) as BatteryManager /* battery service */
             val device_battery = battery_manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) /* battery level percentage */
             val device_model = Build.MODEL /* device model */
@@ -66,28 +79,25 @@ class LoginActivity : AppCompatActivity() {
             val ip_address = getLocalIpAddress() /* local IPv4 address */
 
             /* SIM info */
-            var sim_params = "" /* default empty SIM params */
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-                val subscription_manager = getSystemService(TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager /* subscription manager */
-                val active_subscription_info_list = subscription_manager.activeSubscriptionInfoList /* list of active SIMs */
-                val sim_params_builder = StringBuilder() /* building SIM params */
-                active_subscription_info_list?.forEachIndexed { index, subscription_info ->
-                    val sim_subscription_id = subscription_info.subscriptionId /* subscription ID */
-                    val sim_phone_number = subscription_info.number /* phone number */
-                    val sim_carrier_name = subscription_info.carrierName?.toString() ?: "" /* carrier name */
-                    val sim_display_name = subscription_info.displayName?.toString() ?: "" /* display name */
-                    val sim_slot_index = subscription_info.simSlotIndex /* slot index */
+            val subscription_manager = getSystemService(TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager /* subscription manager */
+            val telephony_manager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager /* phone service */
+            val active_subscription_info_list = subscription_manager.activeSubscriptionInfoList /* list of active SIMs */
+            val sim_params_builder = StringBuilder() /* building SIM params */
+            active_subscription_info_list?.forEachIndexed { index, subscription_info ->
+                val sim_subscription_id = subscription_info.subscriptionId /* subscription ID */
+                val sub_tm = telephony_manager.createForSubscriptionId(sim_subscription_id) /* per-SIM telephony manager */
+                val sim_phone_number = sub_tm.line1Number ?: subscription_info.number ?: "" /* phone number */
+                val sim_carrier_name = subscription_info.carrierName?.toString() ?: "" /* carrier name */
+                val sim_display_name = subscription_info.displayName?.toString() ?: "" /* display name */
+                val sim_slot_index = subscription_info.simSlotIndex /* slot index */
 
-                    sim_params_builder.append("&sims[" + index + "][subscription_id]=" + URLEncoder.encode(sim_subscription_id.toString(), "UTF-8"))
-                    sim_params_builder.append("&sims[" + index + "][phone_number]=" + URLEncoder.encode(sim_phone_number ?: "", "UTF-8"))
-                    sim_params_builder.append("&sims[" + index + "][carrier_name]=" + URLEncoder.encode(sim_carrier_name, "UTF-8"))
-                    sim_params_builder.append("&sims[" + index + "][display_name]=" + URLEncoder.encode(sim_display_name, "UTF-8"))
-                    sim_params_builder.append("&sims[" + index + "][slot_index]=" + URLEncoder.encode(sim_slot_index.toString(), "UTF-8"))
-                }
-                sim_params = sim_params_builder.toString() /* serialized SIM params */
-            } else {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_PHONE_STATE), REQUEST_READ_PHONE_STATE) /* request permission */
+                sim_params_builder.append("&sims[" + index + "][subscription_id]=" + URLEncoder.encode(sim_subscription_id.toString(), "UTF-8"))
+                sim_params_builder.append("&sims[" + index + "][phone_number]=" + URLEncoder.encode(sim_phone_number, "UTF-8"))
+                sim_params_builder.append("&sims[" + index + "][carrier_name]=" + URLEncoder.encode(sim_carrier_name, "UTF-8"))
+                sim_params_builder.append("&sims[" + index + "][display_name]=" + URLEncoder.encode(sim_display_name, "UTF-8"))
+                sim_params_builder.append("&sims[" + index + "][slot_index]=" + URLEncoder.encode(sim_slot_index.toString(), "UTF-8"))
             }
+            val sim_params = sim_params_builder.toString() /* serialized SIM params */
 
             Thread {
                 try {
@@ -183,11 +193,11 @@ class LoginActivity : AppCompatActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_READ_PHONE_STATE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Permission granted. Tap Connect again.", Toast.LENGTH_SHORT).show() /* prompt re-try */
+        if (requestCode == REQUEST_PHONE_PERMISSIONS) {
+            if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                Toast.makeText(this, "Permissions granted. Tap Connect again.", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "Permission denied. Cannot collect SIM info.", Toast.LENGTH_SHORT).show() /* notify denial */
+                Toast.makeText(this, "Permissions denied. Cannot collect SIM info.", Toast.LENGTH_SHORT).show()
             }
         }
     }
