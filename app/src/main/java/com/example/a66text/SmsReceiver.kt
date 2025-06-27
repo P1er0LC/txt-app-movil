@@ -77,7 +77,7 @@ class SmsReceiver : BroadcastReceiver() {
             .add("device_id", device_id)
             .add("phone_number", phone_number)
             .add("content", content)
-            .add("subscription_id", subscription_id.toString())
+            .add("sim_subscription_id", subscription_id.toString())
             .build()
 
         /* Build and send the POST request asynchronously */
