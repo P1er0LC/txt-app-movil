@@ -93,7 +93,7 @@ class SmsService : Service() {
         val apiKey = prefs.getString("pref_api_key", "")!!
 
         /* Build the polling URL */
-        val url = "$siteUrl/api/sms?api_key=$apiKey"
+        val url = "${siteUrl}api/sms?api_key=${apiKey}"
 
         /* Start polling the API at fixed intervals */
         polling_timer = fixedRateTimer(

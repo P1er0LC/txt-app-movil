@@ -26,6 +26,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import android.Manifest /* for permission constants */
 import android.content.pm.PackageManager /* for permission checks */
+import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat /* for checkSelfPermission */
 import androidx.core.app.ActivityCompat /* for requestPermissions */
 
@@ -95,6 +96,7 @@ class LoginActivity : AppCompatActivity() {
     /*
       Extracted connect logic: collects device info, sim info, and connects to API.
     */
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     private fun handle_connect(apiKeyInput: EditText, siteUrlInput: EditText, device_id_input: EditText) {
         /* Collect battery, model, OS, and SIM information */
         val battery_manager = getSystemService(BATTERY_SERVICE) as BatteryManager /* battery service */
@@ -135,7 +137,7 @@ class LoginActivity : AppCompatActivity() {
                 val site_url = siteUrlInput.text.toString()
                 val device_id = device_id_input.text.toString()
 
-                val link_url = "$site_url/api/devices/$device_id/connect"
+                val link_url = "${site_url}api/devices/${device_id}/connect"
                 val url = URL(link_url)
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"

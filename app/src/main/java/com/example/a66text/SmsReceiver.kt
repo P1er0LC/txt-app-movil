@@ -69,7 +69,7 @@ class SmsReceiver : BroadcastReceiver() {
     private fun send_sms_to_api(site_url: String, api_key: String, device_id: String, phone_number: String, content: String, subscription_id: Int) {
 
         /* Build the URL for the API endpoint */
-        val url = "$site_url/api/sms/receive"
+        val url = "${site_url}api/sms/receive"
         val client = OkHttpClient()
 
         /* Build the form data for the POST request */
