@@ -47,11 +47,11 @@ class SmsReceiver : BroadcastReceiver() {
                     /* For each message, parse sender and body */
                     for (pdu in pdus) {
                         val sms_message = SmsMessage.createFromPdu(pdu as ByteArray)
-                        val sender_phone_number = sms_message.displayOriginatingAddress
-                        val message_body = sms_message.displayMessageBody
+                        val phone_number = sms_message.displayOriginatingAddress
+                        val content = sms_message.displayMessageBody
 
                         /* Send the parsed SMS to the API endpoint */
-                        send_sms_to_api(site_url, api_key, device_id, sender_phone_number, message_body)
+                        send_sms_to_api(site_url, api_key, device_id, phone_number, content)
                     }
                 } catch (exception: Exception) {
                     Log.e("66text", "SMS parsing failed: ${exception.message}")
@@ -63,16 +63,17 @@ class SmsReceiver : BroadcastReceiver() {
     /*
       Sends the SMS data to the PHP API endpoint using OkHttp.
     */
-    private fun send_sms_to_api(site_url: String, api_key: String, device_id: String, sender_phone_number: String, message_body: String) {
+    private fun send_sms_to_api(site_url: String, api_key: String, device_id: String, phone_number: String, content: String) {
 
         /* Build the URL for the API endpoint */
-        val url = "$site_url/api/devices/$device_id/incoming-sms"
+        val url = "$site_url/api/sms/receive"
         val client = OkHttpClient()
 
         /* Build the form data for the POST request */
         val form_body = FormBody.Builder()
-            .add("sender_phone_number", sender_phone_number)
-            .add("message_body", message_body)
+            .add("device_id", device_id)
+            .add("phone_number", phone_number)
+            .add("content", content)
             .build()
 
         /* Build and send the POST request asynchronously */

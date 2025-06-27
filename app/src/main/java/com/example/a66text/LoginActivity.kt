@@ -1,3 +1,8 @@
+/*
+  LoginActivity.kt
+  Handles user authentication, collects device info, and links the device to the PHP API endpoint.
+*/
+
 package com.example.a66text
 
 import android.content.Intent
@@ -24,6 +29,9 @@ import android.content.pm.PackageManager /* for permission checks */
 import androidx.core.content.ContextCompat /* for checkSelfPermission */
 import androidx.core.app.ActivityCompat /* for requestPermissions */
 
+/*
+  Collects user credentials and device info, requests permissions, and connects to the API for device pairing.
+*/
 class LoginActivity : AppCompatActivity() {
 
     companion object {
@@ -32,7 +40,11 @@ class LoginActivity : AppCompatActivity() {
 
     private lateinit var shared_preferences: SharedPreferences
 
+    /*
+      Handles activity creation, checks saved credentials, sets up UI, and links device to the API.
+    */
     override fun onCreate(bundle: Bundle?) {
+        /* Check for saved credentials, skip login if present */
         shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
         if (
             !shared_preferences.getString("pref_api_key", "").isNullOrEmpty()
@@ -47,20 +59,24 @@ class LoginActivity : AppCompatActivity() {
         }
 
         super.onCreate(bundle)
+
+        /* Setup UI from layout */
         setContentView(R.layout.activity_login)
 
         shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
 
+        /* Setup button and input references */
         val connectButton: Button = findViewById(R.id.connect_button)
         val apiKeyInput: EditText = findViewById(R.id.api_key_input)
         val siteUrlInput: EditText = findViewById(R.id.site_url_input)
         val device_id_input: EditText = findViewById(R.id.device_id_input)
 
         connectButton.setOnClickListener linkClick@ {
-            // ensure we have phone permissions before linking
+            /* On Connect button click, check for phone permissions */
             val hasState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
             val hasNumber = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_NUMBERS) == PackageManager.PERMISSION_GRANTED
             if (!hasState || !hasNumber) {
+                /* Request phone state and number permissions if missing */
                 ActivityCompat.requestPermissions(
                     this,
                     arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_PHONE_NUMBERS),
@@ -69,6 +85,7 @@ class LoginActivity : AppCompatActivity() {
                 return@linkClick
             }
 
+            /* Collect battery, model, OS, and SIM information */
             val battery_manager = getSystemService(BATTERY_SERVICE) as BatteryManager /* battery service */
             val device_battery = battery_manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) /* battery level percentage */
             val device_model = Build.MODEL /* device model */
@@ -91,6 +108,7 @@ class LoginActivity : AppCompatActivity() {
                 val sim_display_name = subscription_info.displayName?.toString() ?: "" /* display name */
                 val sim_slot_index = subscription_info.simSlotIndex /* slot index */
 
+                /* Build SIM info for form data */
                 sim_params_builder.append("&sims[" + index + "][subscription_id]=" + URLEncoder.encode(sim_subscription_id.toString(), "UTF-8"))
                 sim_params_builder.append("&sims[" + index + "][phone_number]=" + URLEncoder.encode(sim_phone_number, "UTF-8"))
                 sim_params_builder.append("&sims[" + index + "][carrier_name]=" + URLEncoder.encode(sim_carrier_name, "UTF-8"))
@@ -99,6 +117,7 @@ class LoginActivity : AppCompatActivity() {
             }
             val sim_params = sim_params_builder.toString() /* serialized SIM params */
 
+            /* Send device info to API using HTTP POST */
             Thread {
                 try {
                     val api_key = apiKeyInput.text.toString()
@@ -148,6 +167,7 @@ class LoginActivity : AppCompatActivity() {
                         }
                     }
 
+                    /* Parse API response, save credentials, handle result */
                     runOnUiThread {
                         if (response_code == 200 && device_name != null) {
                             shared_preferences.edit()
@@ -174,6 +194,9 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
+    /*
+      Returns the first available IPv4 address for the device.
+    */
     private fun getLocalIpAddress(): String? {
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces() /* network interfaces */
@@ -181,16 +204,20 @@ class LoginActivity : AppCompatActivity() {
                 val addrs = intf.inetAddresses /* interface addresses */
                 for (addr in addrs) {
                     if (!addr.isLoopbackAddress && addr is Inet4Address) {
+                        /* Return IPv4 address */
                         return addr.hostAddress /* return IPv4 address */
                     }
                 }
             }
         } catch (exception: Exception) {
-            /* ignore exception */
+            /* Ignore exception */
         }
         return null /* no address found */
     }
 
+    /*
+      Handles the result of the permission request dialog.
+    */
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_PHONE_PERMISSIONS) {
