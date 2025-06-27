@@ -1,3 +1,8 @@
+/*
+  MainActivity.kt
+  Main entry activity for the app. Handles UI, authentication check, permission requests, and starting the background SMS service.
+*/
+
 package com.example.a66text
 
 import java.util.Timer
@@ -18,6 +23,9 @@ import android.widget.Button
 import android.os.Handler
 import android.os.Looper
 
+/*
+  Displays the main interface, checks authentication, and manages background SMS service and polling UI.
+*/
 class MainActivity : Activity() {
 
     private val poll_handler = Handler(Looper.getMainLooper())
@@ -32,6 +40,9 @@ class MainActivity : Activity() {
         }
     }
 
+    /*
+      Formats a timestamp as a "time ago" string.
+    */
     fun formatTimeAgo(timestamp: Long): String {
         if (timestamp == 0L) return "Never"
         val diff = System.currentTimeMillis() - timestamp
@@ -45,13 +56,18 @@ class MainActivity : Activity() {
         }
     }
 
+    /*
+      Handles activity creation, checks login, sets up UI, and starts background service.
+    */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        /* Load API key and site URL from SharedPreferences */
         val shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
         val api_key = shared_preferences.getString("pref_api_key", "")
         val site_url = shared_preferences.getString("pref_site_url", "")
 
+        /* Redirect to login screen if not authenticated */
         if (api_key.isNullOrEmpty() || site_url.isNullOrEmpty()) {
             Toast.makeText(this, "Missing API key or site URL. Please log in.", Toast.LENGTH_LONG).show()
             val login_intent = Intent(this, LoginActivity::class.java)
@@ -62,14 +78,17 @@ class MainActivity : Activity() {
 
         Log.d("66text", "MainActivity started")
 
+        /* Setup main UI from XML layout */
         setContentView(R.layout.activity_main) /* use XML layout */
 
+        /* Setup button and text view references */
         val status_value = findViewById<TextView>(R.id.text_status_value)
         val last_poll_view = findViewById<TextView>(R.id.text_last_poll)
         val device_name_view = findViewById<TextView>(R.id.text_device_name)
         val site_url_view = findViewById<TextView>(R.id.text_site_url)
         val disconnect_button = findViewById<Button>(R.id.button_disconnect)
 
+        /* Set device name, site URL, last poll info */
         val device_name = shared_preferences.getString("pref_device_name", "Unknown device")
 
         device_name_view.text = "Device: $device_name"
@@ -83,6 +102,7 @@ class MainActivity : Activity() {
         status_value.text = "Connected"
         status_value.setTextColor(getColor(android.R.color.holo_green_dark))
 
+        /* Handle disconnect button click */
         disconnect_button.setOnClickListener {
             val editor = shared_preferences.edit()
             editor.remove("pref_api_key")
@@ -91,6 +111,7 @@ class MainActivity : Activity() {
             editor.remove("pref_device_name")
             editor.apply()
 
+            /* Remove poll handler callbacks */
             poll_handler.removeCallbacks(poll_runnable)
 
             val login_intent = Intent(this, LoginActivity::class.java)
@@ -98,8 +119,10 @@ class MainActivity : Activity() {
             finish()
         }
 
+        /* Request SMS/phone permissions */
         request_sms_permission()
 
+        /* Start background SMS service (foreground for Android O+) */
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 Log.d("66text", "Starting foreground service")
@@ -113,6 +136,9 @@ class MainActivity : Activity() {
         }
     }
 
+    /*
+      Requests necessary SMS and phone permissions.
+    */
     private fun request_sms_permission() {
         val permissions = arrayOf(
             Manifest.permission.SEND_SMS,
@@ -128,6 +154,9 @@ class MainActivity : Activity() {
         }
     }
 
+    /*
+      Handles the result of the permission request dialog.
+    */
     override fun onRequestPermissionsResult(request_code: Int, permissions: Array<out String>, grant_results: IntArray) {
         super.onRequestPermissionsResult(request_code, permissions, grant_results)
 
@@ -140,8 +169,13 @@ class MainActivity : Activity() {
             }
         }
     }
+
+    /*
+      Cleans up poll handler on activity destroy.
+    */
     override fun onDestroy() {
         super.onDestroy()
+        /* Remove poll handler callbacks */
         poll_handler.removeCallbacks(poll_runnable)
     }
 }
