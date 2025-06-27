@@ -52,8 +52,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <receiver android:name=".SmsReceiver" android:exported="true"
-            android:permission="android.permission.BROADCAST_SMS">
+        <receiver android:name=".SmsReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.provider.Telephony.SMS_RECEIVED"/>
             </intent-filter>

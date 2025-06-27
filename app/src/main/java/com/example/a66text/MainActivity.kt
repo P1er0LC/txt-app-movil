@@ -142,7 +142,10 @@ class MainActivity : Activity() {
     private fun request_sms_permission() {
         val permissions = arrayOf(
             Manifest.permission.SEND_SMS,
-            Manifest.permission.READ_PHONE_STATE
+            Manifest.permission.READ_SMS,
+            Manifest.permission.RECEIVE_SMS,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_PHONE_NUMBERS
         )
 
         val missing_permissions = permissions.filter {

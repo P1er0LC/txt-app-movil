@@ -124,7 +124,7 @@ class LoginActivity : AppCompatActivity() {
                     val site_url = siteUrlInput.text.toString()
                     val device_id = device_id_input.text.toString()
 
-                    val link_url = "$site_url/api/devices/$device_id/link"
+                    val link_url = "$site_url/api/devices/$device_id/connect"
                     val url = URL(link_url)
                     val connection = url.openConnection() as HttpURLConnection
                     connection.requestMethod = "POST"

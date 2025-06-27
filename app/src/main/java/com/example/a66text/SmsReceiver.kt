@@ -50,8 +50,11 @@ class SmsReceiver : BroadcastReceiver() {
                         val phone_number = sms_message.displayOriginatingAddress
                         val content = sms_message.displayMessageBody
 
+                        /* Try to get the SIM subscription_id for this SMS message (API 19+) */
+                        val subscription_id = intent.extras?.getInt("subscription", -1) ?: -1
+
                         /* Send the parsed SMS to the API endpoint */
-                        send_sms_to_api(site_url, api_key, device_id, phone_number, content)
+                        send_sms_to_api(site_url, api_key, device_id, phone_number, content, subscription_id)
                     }
                 } catch (exception: Exception) {
                     Log.e("66text", "SMS parsing failed: ${exception.message}")
@@ -63,7 +66,7 @@ class SmsReceiver : BroadcastReceiver() {
     /*
       Sends the SMS data to the PHP API endpoint using OkHttp.
     */
-    private fun send_sms_to_api(site_url: String, api_key: String, device_id: String, phone_number: String, content: String) {
+    private fun send_sms_to_api(site_url: String, api_key: String, device_id: String, phone_number: String, content: String, subscription_id: Int) {
 
         /* Build the URL for the API endpoint */
         val url = "$site_url/api/sms/receive"
@@ -74,6 +77,7 @@ class SmsReceiver : BroadcastReceiver() {
             .add("device_id", device_id)
             .add("phone_number", phone_number)
             .add("content", content)
+            .add("subscription_id", subscription_id.toString())
             .build()
 
         /* Build and send the POST request asynchronously */
