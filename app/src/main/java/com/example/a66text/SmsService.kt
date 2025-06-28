@@ -24,8 +24,8 @@ import kotlin.concurrent.fixedRateTimer
 */
 class SmsService : Service() {
 
-    private val polling_interval_ms: Long = 10000000
-    //private val polling_interval_ms: Long = 10000
+//    private val polling_interval_ms: Long = 10000000
+    private val polling_interval_ms: Long = 10000
     private var polling_timer: Timer? = null
     private val http_client = OkHttpClient()
 
@@ -89,11 +89,12 @@ class SmsService : Service() {
 
         /* Load API config from SharedPreferences */
         val prefs: SharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
-        val siteUrl = prefs.getString("pref_site_url", "")!!.trimEnd('/')
-        val apiKey = prefs.getString("pref_api_key", "")!!
+        val site_url = prefs.getString("pref_site_url", "")!!
+        val api_key = prefs.getString("pref_api_key", "")!!
+        val device_id = prefs.getString("pref_device_id", "")!!
 
         /* Build the polling URL */
-        val url = "${siteUrl}api/sms?api_key=${apiKey}"
+        val url = "${site_url}api/sms/get_pending/${device_id}"
 
         /* Start polling the API at fixed intervals */
         polling_timer = fixedRateTimer(
@@ -104,7 +105,10 @@ class SmsService : Service() {
             try {
                 /* Send HTTP request to get new messages */
                 Log.d("66text", "Sending HTTP request to $url") /* comment */
-                val request = Request.Builder().url(url).build()
+                val request = Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer $api_key")
+                    .build()
                 val response = http_client.newCall(request).execute()
                 Log.d("66text", "Received response: ${response.code}")
 
@@ -112,16 +116,13 @@ class SmsService : Service() {
                 val json_string = response.body?.string() ?: return@fixedRateTimer
                 val json = JSONObject(json_string)
                 val data_object = json.getJSONObject("data")
-                val messages_array = JSONArray().put(data_object.getJSONObject("messages"))
 
-                for (i in 0 until messages_array.length()) {
-                    val message_object = messages_array.getJSONObject(i)
-                    val phone_number = message_object.getString("phone_number")
-                    val text = message_object.getString("text")
+                val phone_number = data_object.getString("phone_number")
+                val content = data_object.getString("content")
+                val sim_subscription_id = data_object.optInt("sim_subscription_id", -1)
 
-                    /* Send SMS using SmsManager */
-                    send_sms(phone_number, text)
-                }
+                /* Send SMS using SmsManager and custom subscription id */
+                send_sms(phone_number, content, sim_subscription_id)
             } catch (ex: Exception) {
                 /* Log errors if any */
                 Log.e("66text", "Polling failed: ${ex.message}")
@@ -130,16 +131,18 @@ class SmsService : Service() {
     }
 
     /*
-      Sends an SMS message to the specified phone number.
+      Sends an SMS message to the specified phone number, optionally using the specified SIM subscription ID.
     */
-    private fun send_sms(phone_number: String, text: String) {
+    private fun send_sms(phone_number: String, content: String, sim_subscription_id: Int) {
         try {
-            /* Send SMS using SmsManager */
-            val sms = SmsManager.getDefault()
-            sms.sendTextMessage(phone_number, null, text, null, null)
-            Log.d("66text", "SMS sent to $phone_number")
+            val sms_manager = if (sim_subscription_id != -1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                SmsManager.getSmsManagerForSubscriptionId(sim_subscription_id)
+            } else {
+                SmsManager.getDefault()
+            }
+            sms_manager.sendTextMessage(phone_number, null, content, null, null)
+            Log.d("66text", "SMS sent to $phone_number using SIM $sim_subscription_id")
         } catch (e: Exception) {
-            /* Log errors if any */
             Log.e("66text", "Failed to send SMS: ${e.message}")
         }
     }
