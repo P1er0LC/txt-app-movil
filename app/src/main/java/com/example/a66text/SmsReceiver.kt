@@ -54,7 +54,7 @@ class SmsReceiver : BroadcastReceiver() {
                         val subscription_id = intent.extras?.getInt("subscription", -1) ?: -1
 
                         /* Send the parsed SMS to the API endpoint */
-                        send_sms_to_api(site_url, api_key, device_id, phone_number, content, subscription_id)
+                        send_sms_to_api(context, site_url, api_key, device_id, phone_number, content, subscription_id)
                     }
                 } catch (exception: Exception) {
                     Log.e("66text", "SMS parsing failed: ${exception.message}")
@@ -66,7 +66,13 @@ class SmsReceiver : BroadcastReceiver() {
     /*
       Sends the SMS data to the PHP API endpoint using OkHttp.
     */
-    private fun send_sms_to_api(site_url: String, api_key: String, device_id: String, phone_number: String, content: String, subscription_id: Int) {
+    private fun send_sms_to_api(context: Context, site_url: String, api_key: String, device_id: String, phone_number: String, content: String, subscription_id: Int) {
+
+        /* Get battery info */
+        val battery_manager = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+        val device_battery = battery_manager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val battery_status_intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+        val device_is_charging = if (battery_status_intent?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, -1) != 0) 1 else 0
 
         /* Build the URL for the API endpoint */
         val url = "${site_url}api/sms/receive"
@@ -78,6 +84,8 @@ class SmsReceiver : BroadcastReceiver() {
             .add("phone_number", phone_number)
             .add("content", content)
             .add("sim_subscription_id", subscription_id.toString())
+            .add("device_battery", device_battery.toString())
+            .add("device_is_charging", device_is_charging.toString())
             .build()
 
         /* Build and send the POST request asynchronously */

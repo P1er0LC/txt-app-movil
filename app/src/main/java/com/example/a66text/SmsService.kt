@@ -96,8 +96,13 @@ class SmsService : Service() {
         val api_key = prefs.getString("pref_api_key", "")!!
         val device_id = prefs.getString("pref_device_id", "")!!
 
+        val battery_manager = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
+        val device_battery = battery_manager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val battery_status_intent = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+        val device_is_charging = if (battery_status_intent?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, -1) != 0) 1 else 0
+
         /* Build the polling URL */
-        val url = "${site_url}api/sms/get_pending/${device_id}"
+        val url = "${site_url}api/sms/get_pending/${device_id}?device_battery=${device_battery}&device_is_charging=${device_is_charging}"
 
         /* Start polling the API at fixed intervals */
         polling_timer = fixedRateTimer(

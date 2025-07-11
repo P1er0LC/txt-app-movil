@@ -105,7 +105,7 @@ class LoginActivity : AppCompatActivity() {
         val device_brand = Build.BRAND /* device brand */
         val device_os = Build.VERSION.RELEASE /* OS version */
         val battery_status_intent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) /* battery status intent */
-        val device_is_charging = battery_status_intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) != 0 /* charging status */
+        val device_is_charging = if (battery_status_intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) != 0) 1 else 0 /* charging status as 1 or 0 */
         val ip_address = getLocalIpAddress() /* local IPv4 address */
 
         /* SIM info */
