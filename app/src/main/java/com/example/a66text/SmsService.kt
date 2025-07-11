@@ -118,6 +118,10 @@ class SmsService : Service() {
                 /* Parse JSON and extract messages */
                 val json_string = response.body?.string() ?: return@fixedRateTimer
                 val json = JSONObject(json_string)
+
+                val shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                shared_preferences.edit().putLong("pref_last_poll_ts", System.currentTimeMillis()).apply()
+
                 val data_object = json.getJSONObject("data")
 
                 val phone_number = data_object.getString("phone_number")
