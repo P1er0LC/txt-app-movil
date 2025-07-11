@@ -114,6 +114,9 @@ class MainActivity : Activity() {
             /* Remove poll handler callbacks */
             poll_handler.removeCallbacks(poll_runnable)
 
+            /* Stop the background SMS polling service */
+            stopService(Intent(this, SmsService::class.java))
+
             val login_intent = Intent(this, LoginActivity::class.java)
             startActivity(login_intent)
             finish()

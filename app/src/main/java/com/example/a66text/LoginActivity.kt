@@ -116,10 +116,20 @@ class LoginActivity : AppCompatActivity() {
         active_subscription_info_list?.forEachIndexed { index, subscription_info ->
             val sim_subscription_id = subscription_info.subscriptionId /* subscription ID */
             val sub_tm = telephony_manager.createForSubscriptionId(sim_subscription_id) /* per-SIM telephony manager */
-            val sim_phone_number = sub_tm.line1Number ?: subscription_info.number ?: "" /* phone number */
             val sim_carrier_name = subscription_info.carrierName?.toString() ?: "" /* carrier name */
             val sim_display_name = subscription_info.displayName?.toString() ?: "" /* display name */
             val sim_slot_index = subscription_info.simSlotIndex /* slot index */
+
+            /* Try to get phone number from all sources */
+            var sim_phone_number = ""
+            try {
+                sim_phone_number = sub_tm.line1Number ?: ""
+                if (sim_phone_number.isEmpty()) {
+                    sim_phone_number = subscription_info.number ?: ""
+                }
+            } catch (exception: Exception) {
+                /* Ignore exception, leave sim_phone_number as empty */
+            }
 
             /* Build SIM info for form data */
             sim_params_builder.append("&sims[" + index + "][subscription_id]=" + URLEncoder.encode(sim_subscription_id.toString(), "UTF-8"))
