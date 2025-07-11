@@ -5,6 +5,7 @@
 package com.example.a66text
 
 import android.app.*
+import android.app.Service.MODE_PRIVATE
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -14,6 +15,7 @@ import android.telephony.SmsManager
 import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.FormBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.*
@@ -24,7 +26,7 @@ import kotlin.concurrent.fixedRateTimer
 */
 class SmsService : Service() {
 
-//    private val polling_interval_ms: Long = 10000000
+    //    private val polling_interval_ms: Long = 10000000
     private val polling_interval_ms: Long = 10000
     private var polling_timer: Timer? = null
     private val http_client = OkHttpClient()
@@ -58,7 +60,8 @@ class SmsService : Service() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             /* Create notification channel for Android O and above */
-            val channel = NotificationChannel(channel_id, channel_name, NotificationManager.IMPORTANCE_LOW)
+            val channel =
+                NotificationChannel(channel_id, channel_name, NotificationManager.IMPORTANCE_LOW)
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
@@ -119,10 +122,11 @@ class SmsService : Service() {
 
                 val phone_number = data_object.getString("phone_number")
                 val content = data_object.getString("content")
+                val sms_id = data_object.getString("id") /* get sms_id from response */
                 val sim_subscription_id = data_object.optInt("sim_subscription_id", -1)
 
                 /* Send SMS using SmsManager and custom subscription id */
-                send_sms(phone_number, content, sim_subscription_id)
+                send_sms(phone_number, content, sim_subscription_id, sms_id)
             } catch (ex: Exception) {
                 /* Log errors if any */
                 Log.e("66text", "Polling failed: ${ex.message}")
@@ -133,17 +137,25 @@ class SmsService : Service() {
     /*
       Sends an SMS message to the specified phone number, optionally using the specified SIM subscription ID.
     */
-    private fun send_sms(phone_number: String, content: String, sim_subscription_id: Int) {
+    private fun send_sms(
+        phone_number: String,
+        content: String,
+        sim_subscription_id: Int,
+        sms_id: String
+    ) {
         try {
-            val sms_manager = if (sim_subscription_id != -1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                SmsManager.getSmsManagerForSubscriptionId(sim_subscription_id)
-            } else {
-                SmsManager.getDefault()
-            }
+            val sms_manager =
+                if (sim_subscription_id != -1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                    SmsManager.getSmsManagerForSubscriptionId(sim_subscription_id)
+                } else {
+                    SmsManager.getDefault()
+                }
             sms_manager.sendTextMessage(phone_number, null, content, null, null)
             Log.d("66text", "SMS sent to $phone_number using SIM $sim_subscription_id")
+            update_sms_status(sms_id, "sent", null) /* update status to sent */
         } catch (e: Exception) {
             Log.e("66text", "Failed to send SMS: ${e.message}")
+            update_sms_status(sms_id, "failed", e.message)
         }
     }
 
@@ -158,5 +170,40 @@ class SmsService : Service() {
     override fun onDestroy() {
         polling_timer?.cancel()
         super.onDestroy()
+    }
+
+    /*
+      Updates the status of the SMS message on the server.
+    */
+    private fun update_sms_status(sms_id: String, status: String, error: String?) {
+        /* Load API config from SharedPreferences */
+        val prefs: SharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val site_url = prefs.getString("pref_site_url", "")!!
+        val api_key = prefs.getString("pref_api_key", "")!!
+        val url = "${site_url}api/sms/update_status"
+
+        /* Prepare form body */
+        val formBuilder = FormBody.Builder()
+            .add("sms_id", sms_id)
+            .add("status", status)
+        if (error != null) {
+            formBuilder.add("error", error)
+        }
+        val body = formBuilder.build()
+
+        /* Send POST request in background thread */
+        Thread {
+            try {
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer " + api_key)
+                    .post(body)
+                    .build()
+                val response = http_client.newCall(request).execute()
+                Log.d("66text", "Status updated: " + response.code)
+            } catch (ex: Exception) {
+                Log.e("66text", "Failed to update status: " + ex.message)
+            }
+        }.start()
     }
 }
