@@ -19,7 +19,8 @@ import okhttp3.FormBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.*
-import kotlin.concurrent.fixedRateTimer
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.google.firebase.messaging.RemoteMessage
 
 /*
   Runs in the background to check the API for new messages to send and sends them as SMS.
@@ -39,16 +40,16 @@ class SmsService : Service() {
     }
 
     /*
-      Called when the service is started; starts foreground service and polling.
+      Called when the service is started; starts foreground service and draining.
     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         /* Start as a foreground service for reliability */
         start_foreground()
 
-        /* Begin polling the API for messages */
-        start_polling()
+        /* Begin draining on demand (push-to-wake, or app-start) */
+        start_draining()
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     /*
@@ -70,13 +71,13 @@ class SmsService : Service() {
         val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, channel_id)
                 .setContentTitle("66text Running")
-                .setContentText("Polling your server...")
+                .setContentText("Syncing with your server...")
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .build()
         } else {
             Notification.Builder(this)
                 .setContentTitle("66text Running")
-                .setContentText("Polling your server...")
+                .setContentText("Syncing with your server...")
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .build()
         }
@@ -85,10 +86,10 @@ class SmsService : Service() {
     }
 
     /*
-      Starts a timer to periodically poll the API for new SMS messages.
+      Drains the server queue: keep fetching and sending until no more messages are pending.
     */
-    private fun start_polling() {
-        Log.d("66text", "Polling function started")
+    private fun start_draining() {
+        Log.d("66text", "Drain loop started")
 
         /* Load API config from SharedPreferences */
         val prefs: SharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
@@ -96,51 +97,100 @@ class SmsService : Service() {
         val api_key = prefs.getString("pref_api_key", "")!!
         val device_id = prefs.getString("pref_device_id", "")!!
 
-        val battery_manager = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
-        val device_battery = battery_manager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
-        val battery_status_intent = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
-        val device_is_charging = if (battery_status_intent?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, -1) != 0) 1 else 0
-
-        /* Build the polling URL */
-        val url = "${site_url}api/sms/get_pending/${device_id}?device_battery=${device_battery}&device_is_charging=${device_is_charging}"
-
-        /* Start polling the API at fixed intervals */
-        polling_timer = fixedRateTimer(
-            name = "sms_polling_timer",
-            initialDelay = 0,
-            period = polling_interval_ms
-        ) {
-            try {
-                /* Send HTTP request to get new messages */
-                Log.d("66text", "Sending HTTP request to $url") /* comment */
-                val request = Request.Builder()
-                    .url(url)
-                    .addHeader("Authorization", "Bearer $api_key")
-                    .build()
-                val response = http_client.newCall(request).execute()
-                Log.d("66text", "Received response: ${response.code}")
-
-                /* Parse JSON and extract messages */
-                val json_string = response.body?.string() ?: return@fixedRateTimer
-                val json = JSONObject(json_string)
-
-                val shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
-                shared_preferences.edit().putLong("pref_last_poll_ts", System.currentTimeMillis()).apply()
-
-                val data_object = json.getJSONObject("data")
-
-                val phone_number = data_object.getString("phone_number")
-                val content = data_object.getString("content")
-                val sms_id = data_object.getString("id") /* get sms_id from response */
-                val sim_subscription_id = data_object.optInt("sim_subscription_id", -1)
-
-                /* Send SMS using SmsManager and custom subscription id */
-                send_sms(phone_number, content, sim_subscription_id, sms_id)
-            } catch (ex: Exception) {
-                /* Log errors if any */
-                Log.e("66text", "Polling failed: ${ex.message}")
-            }
+        if (site_url.isEmpty() || api_key.isEmpty() || device_id.isEmpty()) {
+            Log.e("66text", "Missing API config; aborting drain")
+            stopSelf()
+            return
         }
+
+        Thread {
+            try {
+                var iterations = 0
+                while (true) {
+                    iterations += 1
+
+                    val battery_manager = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
+                    val device_battery = battery_manager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                    val battery_status_intent = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+                    val device_is_charging = if (battery_status_intent?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, -1) != 0) 1 else 0
+
+                    val url = "${site_url}api/sms/get_pending/${device_id}?device_battery=${device_battery}&device_is_charging=${device_is_charging}"
+                    Log.d("66text", "Drain HTTP GET: $url") /* comment */
+
+                    val request = Request.Builder()
+                        .url(url)
+                        .addHeader("Authorization", "Bearer $api_key")
+                        .build()
+
+                    val response = http_client.newCall(request).execute()
+                    val code = response.code
+                    val body_string = response.body?.string()
+                    response.close()
+
+                    val shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                    shared_preferences.edit().putLong("pref_last_poll_ts", System.currentTimeMillis()).apply()
+
+                    /* No content or not OK -> stop draining */
+                    if (code == 204 || body_string.isNullOrEmpty()) {
+                        Log.d("66text", "No pending messages (204/empty body). Stopping drain.")
+                        break
+                    }
+
+                    val json = try { JSONObject(body_string) } catch (ex: Exception) {
+                        Log.e("66text", "Invalid JSON: ${ex.message}")
+                        break
+                    }
+
+                    /* Expect either data object or data array; handle both defensively */
+                    val data_any = json.opt("data")
+                    if (data_any == null) {
+                        Log.d("66text", "No 'data' in response. Stopping drain.")
+                        break
+                    }
+
+                    if (data_any is JSONObject) {
+                        val phone_number = data_any.optString("phone_number", "")
+                        val content = data_any.optString("content", "")
+                        val sms_id = data_any.optString("id", "")
+                        val sim_subscription_id = data_any.optInt("sim_subscription_id", -1)
+
+                        if (phone_number.isEmpty() || sms_id.isEmpty()) {
+                            Log.d("66text", "Empty job. Stopping drain.")
+                            break
+                        }
+                        send_sms(phone_number, content, sim_subscription_id, sms_id)
+                    } else if (data_any is JSONArray) {
+                        if (data_any.length() == 0) {
+                            Log.d("66text", "Empty array. Stopping drain.")
+                            break
+                        }
+                        for (i in 0 until data_any.length()) {
+                            val item = data_any.optJSONObject(i) ?: continue
+                            val phone_number = item.optString("phone_number", "")
+                            val content = item.optString("content", "")
+                            val sms_id = item.optString("id", "")
+                            val sim_subscription_id = item.optInt("sim_subscription_id", -1)
+                            if (phone_number.isNotEmpty() && sms_id.isNotEmpty()) {
+                                send_sms(phone_number, content, sim_subscription_id, sms_id)
+                            }
+                        }
+                    } else {
+                        Log.d("66text", "Unknown data type. Stopping drain.")
+                        break
+                    }
+
+                    /* Safety to avoid infinite tight loop if server misbehaves */
+                    if (iterations >= 100) {
+                        Log.w("66text", "Drain loop safeguard hit (100 iterations). Stopping.")
+                        break
+                    }
+                }
+            } catch (ex: Exception) {
+                Log.e("66text", "Drain failed: ${ex.message}")
+            } finally {
+                stopSelf()
+            }
+        }.start()
     }
 
     /*
@@ -214,5 +264,34 @@ class SmsService : Service() {
                 Log.e("66text", "Failed to update status: " + ex.message)
             }
         }.start()
+    }
+}
+
+/*
+  PushMessagingService
+  Receives FCM pushes and starts SmsService to drain the queue.
+*/
+class PushMessagingService : FirebaseMessagingService() {
+    override fun onMessageReceived(remote_message: RemoteMessage) {
+        /* Check data payload type if provided */
+        val message_type = remote_message.data["type"] ?: "start_drain"
+        if (message_type == "start_drain") {
+            val context = applicationContext
+            val service_intent = Intent(context, SmsService::class.java)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(service_intent)
+                } else {
+                    context.startService(service_intent)
+                }
+            } catch (ex: Exception) {
+                Log.e("66text", "Failed to start SmsService from FCM: ${ex.message}")
+            }
+        }
+    }
+
+    override fun onNewToken(new_token: String) {
+        Log.d("66text", "FCM token refreshed") /* comment */
+        /* You can post this token to your server later if needed */
     }
 }
