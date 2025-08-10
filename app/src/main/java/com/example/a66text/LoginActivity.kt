@@ -76,18 +76,27 @@ class LoginActivity : AppCompatActivity() {
         device_id_input = findViewById(R.id.device_id_input)
 
         connectButton.setOnClickListener {
-            /* On Connect button click, check for phone permissions */
-            val hasState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
-            val hasNumber = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_NUMBERS) == PackageManager.PERMISSION_GRANTED
-            if (!hasState || !hasNumber) {
-                /* Request phone state and number permissions if missing */
+            /* On Connect button click, check and request runtime permissions */
+            val needed_permissions = mutableListOf<String>() /* collect missing permissions */
+
+            val has_read_phone_state = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+            val has_read_phone_numbers = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_NUMBERS) == PackageManager.PERMISSION_GRANTED
+            val has_send_sms = ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+            val needs_post_notifications = Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+
+            if (!has_read_phone_state) { needed_permissions.add(Manifest.permission.READ_PHONE_STATE) }
+            if (!has_read_phone_numbers) { needed_permissions.add(Manifest.permission.READ_PHONE_NUMBERS) }
+            if (!has_send_sms) { needed_permissions.add(Manifest.permission.SEND_SMS) }
+            if (needs_post_notifications) { needed_permissions.add(Manifest.permission.POST_NOTIFICATIONS) }
+
+            if (needed_permissions.isNotEmpty()) {
+                /* Request any missing permissions in one dialog */
                 ActivityCompat.requestPermissions(
                     this,
-                    arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_PHONE_NUMBERS),
+                    needed_permissions.toTypedArray(),
                     REQUEST_PHONE_PERMISSIONS
-                ) /* request both permissions */
-            }
-            else {
+                )
+            } else {
                 handle_connect(apiKeyInput, siteUrlInput, device_id_input)
             }
         }
@@ -244,7 +253,7 @@ class LoginActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_PHONE_PERMISSIONS) {
             if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                Toast.makeText(this, "Permissions granted. Tap Connect again.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Permissions granted.", Toast.LENGTH_SHORT).show()
                 handle_connect(apiKeyInput, siteUrlInput, device_id_input)
             } else {
                 Toast.makeText(this, "Permissions denied. Cannot collect SIM info.", Toast.LENGTH_SHORT).show()

@@ -291,7 +291,7 @@ class PushMessagingService : FirebaseMessagingService() {
     }
 
     override fun onNewToken(new_token: String) {
-        Log.d("66text", "FCM token refreshed") /* comment */
+        Log.d("66text", "66text FCM DEVICE token: $new_token")
         /* You can post this token to your server later if needed */
     }
 }
