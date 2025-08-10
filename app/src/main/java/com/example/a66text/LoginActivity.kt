@@ -29,6 +29,9 @@ import android.content.pm.PackageManager /* for permission checks */
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat /* for checkSelfPermission */
 import androidx.core.app.ActivityCompat /* for requestPermissions */
+import com.google.firebase.messaging.FirebaseMessaging /* FCM token fetch */
+import com.google.android.gms.tasks.Tasks /* await FCM token */
+import java.util.concurrent.TimeUnit /* await timeout */
 
 /*
   Collects user credentials and device info, requests permissions, and connects to the API for device pairing.
@@ -152,9 +155,24 @@ class LoginActivity : AppCompatActivity() {
         /* Send device info to API using HTTP POST */
         Thread {
             try {
+                /* fetch fcm token with a short timeout so we can send it on initial connect */
+                var device_fcm_token = ""
+                try {
+                    val fetched_token = Tasks.await(FirebaseMessaging.getInstance().token, 5, TimeUnit.SECONDS)
+                    if (fetched_token != null) {
+                        device_fcm_token = fetched_token
+                    }
+                } catch (fetch_exception: Exception) {
+                    /* ignore; proceed without token */
+                }
+
                 val api_key = apiKeyInput.text.toString()
                 val site_url = siteUrlInput.text.toString()
                 val device_id = device_id_input.text.toString()
+
+                if (device_fcm_token.isNotEmpty()) {
+                    shared_preferences.edit().putString("pref_device_fcm_token", device_fcm_token).apply()
+                }
 
                 val link_url = "${site_url}api/devices/${device_id}/connect"
                 val url = URL(link_url)
@@ -171,7 +189,8 @@ class LoginActivity : AppCompatActivity() {
                     "&device_os=" + URLEncoder.encode(device_os, "UTF-8") +
                     "&device_is_charging=" + URLEncoder.encode(device_is_charging.toString(), "UTF-8") +
                     "&ip=" + URLEncoder.encode(ip_address, "UTF-8") +
-                    sim_params /* form data string including SIM info */
+                    (if (device_fcm_token.isNotEmpty()) "&device_fcm_token=" + URLEncoder.encode(device_fcm_token, "UTF-8") else "") +
+                    sim_params /* form data string including SIM info and optional FCM token */
 
                 val output_stream = connection.outputStream /* output stream for form data */
                 output_stream.write(form_data.toByteArray())
@@ -249,6 +268,7 @@ class LoginActivity : AppCompatActivity() {
     /*
       Handles the result of the permission request dialog.
     */
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_PHONE_PERMISSIONS) {

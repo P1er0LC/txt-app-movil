@@ -292,6 +292,8 @@ class PushMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(new_token: String) {
         Log.d("66text", "66text FCM DEVICE token: $new_token")
-        /* You can post this token to your server later if needed */
+        /* persist latest token for initial connect or later updates */
+        val shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        shared_preferences.edit().putString("pref_fcm_token", new_token).apply()
     }
 }
