@@ -47,7 +47,7 @@ class SmsService : Service() {
         start_foreground()
 
         /* Begin draining on demand (push-to-wake, or app-start) */
-        start_draining()
+        start_sms()
 
         return START_NOT_STICKY
     }
@@ -88,8 +88,8 @@ class SmsService : Service() {
     /*
       Drains the server queue: keep fetching and sending until no more messages are pending.
     */
-    private fun start_draining() {
-        Log.d("66text", "Drain loop started")
+    private fun start_sms() {
+        Log.d("66text", "Sms sending loop started")
 
         /* Load API config from SharedPreferences */
         val prefs: SharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
@@ -115,7 +115,7 @@ class SmsService : Service() {
                     val device_is_charging = if (battery_status_intent?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, -1) != 0) 1 else 0
 
                     val url = "${site_url}api/sms/get_pending/${device_id}?device_battery=${device_battery}&device_is_charging=${device_is_charging}"
-                    Log.d("66text", "Drain HTTP GET: $url") /* comment */
+                    Log.d("66text", "SMS HTTP GET: $url") /* comment */
 
                     val request = Request.Builder()
                         .url(url)
@@ -274,8 +274,8 @@ class SmsService : Service() {
 class PushMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remote_message: RemoteMessage) {
         /* Check data payload type if provided */
-        val message_type = remote_message.data["type"] ?: "start_drain"
-        if (message_type == "start_drain") {
+        val message_type = remote_message.data["type"] ?: "sms"
+        if (message_type == "sms") {
             val context = applicationContext
             val service_intent = Intent(context, SmsService::class.java)
             try {
