@@ -29,6 +29,10 @@ class SmsService : Service() {
 
     //    private val polling_interval_ms: Long = 10000000
     private val polling_interval_ms: Long = 10000
+    // Configurable delay defaults, used unless overridden by SharedPreferences
+    private val per_sms_delay_ms_default: Long = 1200 /* default pause between SMS per part */
+    private val batch_pause_ms_default: Long = 3000 /* default pause after processing a batch */
+    private val jitter_ms_max: Long = 300 /* max random jitter to add */
     private var polling_timer: Timer? = null
     private val http_client = OkHttpClient()
 
@@ -105,9 +109,11 @@ class SmsService : Service() {
 
         Thread {
             try {
-                var iterations = 0
+                // Load configurable delays from SharedPreferences
+                val prefs_for_delay = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                val per_sms_delay_ms = prefs_for_delay.getLong("pref_per_sms_delay_ms", per_sms_delay_ms_default)
+                val batch_pause_ms = prefs_for_delay.getLong("pref_batch_pause_ms", batch_pause_ms_default)
                 while (true) {
-                    iterations += 1
 
                     val battery_manager = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
                     val device_battery = battery_manager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -130,9 +136,9 @@ class SmsService : Service() {
                     val shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
                     shared_preferences.edit().putLong("pref_last_poll_ts", System.currentTimeMillis()).apply()
 
-                    /* No content or not OK -> stop draining */
-                    if (code == 204 || body_string.isNullOrEmpty()) {
-                        Log.d("66text", "No pending messages (204/empty body). Stopping drain.")
+                    /* if there is no body, stop the drain */
+                    if (body_string.isNullOrEmpty()) {
+                        Log.d("66text", "Empty HTTP body; stopping drain.")
                         break
                     }
 
@@ -159,6 +165,10 @@ class SmsService : Service() {
                             break
                         }
                         send_sms(phone_number, content, sim_subscription_id, sms_id)
+                        val sms_parts_count = SmsManager.getDefault().divideMessage(content).size
+                        val jitter_ms = (0..jitter_ms_max).random().toLong()
+                        val effective_delay_ms = (sms_parts_count * per_sms_delay_ms) + jitter_ms
+                        try { Thread.sleep(effective_delay_ms) } catch (_: InterruptedException) { }
                     } else if (data_any is JSONArray) {
                         if (data_any.length() == 0) {
                             Log.d("66text", "Empty array. Stopping drain.")
@@ -172,18 +182,19 @@ class SmsService : Service() {
                             val sim_subscription_id = item.optInt("sim_subscription_id", -1)
                             if (phone_number.isNotEmpty() && sms_id.isNotEmpty()) {
                                 send_sms(phone_number, content, sim_subscription_id, sms_id)
+                                val sms_parts_count = SmsManager.getDefault().divideMessage(content).size
+                                val jitter_ms = (0..jitter_ms_max).random().toLong()
+                                val effective_delay_ms = (sms_parts_count * per_sms_delay_ms) + jitter_ms
+                                try { Thread.sleep(effective_delay_ms) } catch (_: InterruptedException) { }
                             }
                         }
                     } else {
-                        Log.d("66text", "Unknown data type. Stopping drain.")
+                        Log.d("66text", "Unknown 'data' type. Stopping drain.")
                         break
                     }
 
-                    /* Safety to avoid infinite tight loop if server misbehaves */
-                    if (iterations >= 100) {
-                        Log.w("66text", "Drain loop safeguard hit (100 iterations). Stopping.")
-                        break
-                    }
+                    try { Thread.sleep(batch_pause_ms) } catch (_: InterruptedException) { }
+                    // (removed safeguard loop break)
                 }
             } catch (ex: Exception) {
                 Log.e("66text", "Drain failed: ${ex.message}")
