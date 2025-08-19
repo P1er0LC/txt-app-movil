@@ -30,8 +30,8 @@ class SmsService : Service() {
     //    private val polling_interval_ms: Long = 10000000
     private val polling_interval_ms: Long = 10000
     // Configurable delay defaults, used unless overridden by SharedPreferences
-    private val per_sms_delay_ms_default: Long = 1200 /* default pause between SMS per part */
-    private val batch_pause_ms_default: Long = 3000 /* default pause after processing a batch */
+    private val per_sms_delay_ms_default: Long = 5000 /* default pause between SMS per part */
+    private val batch_pause_ms_default: Long = 0 /* default pause after processing a batch */
     private val jitter_ms_max: Long = 300 /* max random jitter to add */
     private var polling_timer: Timer? = null
     private val http_client = OkHttpClient()
