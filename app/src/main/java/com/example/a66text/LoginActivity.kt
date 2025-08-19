@@ -201,11 +201,26 @@ class LoginActivity : AppCompatActivity() {
                 val response_body = connection.inputStream.bufferedReader().use { reader -> reader.readText() } /* server response */
                 var error_message: String? = null /* to hold error title */
                 var device_name: String? = null /* to hold returned device name */
+                var per_sms_delay_ms_from_api: Long? = null
 
                 if (response_code == 200) {
                     val json_response = JSONObject(response_body) /* parse JSON response */
                     val data_object = json_response.getJSONObject("data") /* extract data object */
                     device_name = data_object.getString("name") /* get device name */
+                    val settings_object = data_object.optJSONObject("settings")
+                    if (settings_object != null) {
+                        val delay_any = settings_object.opt("sms_in_between_delay")
+                        val delay_seconds: Long? = when (delay_any) {
+                            is Int -> delay_any.toLong()
+                            is Long -> delay_any
+                            is Double -> delay_any.toLong()
+                            is String -> delay_any.toLongOrNull()
+                            else -> null
+                        }
+                        if (delay_seconds != null && delay_seconds >= 0) {
+                            per_sms_delay_ms_from_api = delay_seconds * 1000L
+                        }
+                    }
                 } else {
                     val error_body = connection.errorStream?.bufferedReader()?.use { reader -> reader.readText() } /* error response */
                     try {
@@ -221,12 +236,16 @@ class LoginActivity : AppCompatActivity() {
                 /* Parse API response, save credentials, handle result */
                 runOnUiThread {
                     if (response_code == 200 && device_name != null) {
-                        shared_preferences.edit()
+                        val editor = shared_preferences.edit()
+                        editor
                             .putString("pref_api_key", api_key)
                             .putString("pref_site_url", site_url)
                             .putString("pref_device_id", device_id)
                             .putString("pref_device_name", device_name) /* save returned name */
-                            .apply()
+                        if (per_sms_delay_ms_from_api != null) {
+                            editor.putLong("pref_per_sms_delay_ms", per_sms_delay_ms_from_api!!)
+                        }
+                        editor.apply()
 
                         Toast.makeText(this, "Connected as $device_name", Toast.LENGTH_SHORT).show() /* show device name */
                         val main_activity_intent = Intent(this, MainActivity::class.java)
