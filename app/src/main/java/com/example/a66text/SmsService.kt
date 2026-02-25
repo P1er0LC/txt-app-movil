@@ -111,7 +111,9 @@ class SmsService : Service() {
             try {
                 // Load configurable delays from SharedPreferences
                 val prefs_for_delay = getSharedPreferences("app_prefs", MODE_PRIVATE)
-                val per_sms_delay_ms = prefs_for_delay.getLong("pref_per_sms_delay_ms", per_sms_delay_ms_default)
+                val delay_min = prefs_for_delay.getLong("pref_per_sms_delay_minimum", 3L)
+                val delay_max = prefs_for_delay.getLong("pref_per_sms_delay_maximum", 3L)
+                val per_sms_delay_ms = (delay_min..delay_max).random() * 1000L
                 val batch_pause_ms = prefs_for_delay.getLong("pref_batch_pause_ms", batch_pause_ms_default)
                 while (true) {
 
@@ -207,6 +209,13 @@ class SmsService : Service() {
     /*
       Sends an SMS message to the specified phone number, optionally using the specified SIM subscription ID.
     */
+    /*
+  Sends an SMS message to the specified phone number, handling long messages
+*/
+    /*
+  Sends an SMS message to the specified phone number, optionally using the specified SIM subscription ID.
+  Handles restricted access on Android 14+ (e.g., Pixel 8 Pro) by gracefully falling back to the default SIM.
+*/
     private fun send_sms(
         phone_number: String,
         content: String,
@@ -214,18 +223,52 @@ class SmsService : Service() {
         sms_id: String
     ) {
         try {
-            val sms_manager =
-                if (sim_subscription_id != -1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                    SmsManager.getSmsManagerForSubscriptionId(sim_subscription_id)
-                } else {
-                    SmsManager.getDefault()
+            var sms_manager: SmsManager
+
+            if (sim_subscription_id != -1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                try {
+                    /* Try to get SmsManager for the requested SIM */
+                    sms_manager = SmsManager.getSmsManagerForSubscriptionId(sim_subscription_id)
+                    Log.d("66text", "Using specific SIM ID: $sim_subscription_id for $phone_number")
+                } catch (security_exception: SecurityException) {
+                    /* Access restricted on Pixels or Android 14+ devices */
+                    Log.w("66text", "SecurityException: SIM access restricted; using default SIM instead.")
+                    sms_manager = SmsManager.getDefault()
+                } catch (illegal_exception: IllegalArgumentException) {
+                    /* Invalid subscription ID */
+                    Log.w("66text", "Invalid SIM ID: $sim_subscription_id; using default SIM instead.")
+                    sms_manager = SmsManager.getDefault()
+                } catch (exception: Exception) {
+                    /* Any other unexpected issue */
+                    Log.w("66text", "Unexpected error creating SmsManager for SIM $sim_subscription_id: ${exception.message}")
+                    sms_manager = SmsManager.getDefault()
                 }
-            sms_manager.sendTextMessage(phone_number, null, content, null, null)
-            Log.d("66text", "SMS sent to $phone_number using SIM $sim_subscription_id")
+            } else {
+                /* fallback to default SIM (single-SIM or no SIM ID) */
+                sms_manager = SmsManager.getDefault()
+                Log.d("66text", "Using default SIM for $phone_number")
+            }
+
+            /* Split the message if it exceeds the limit */
+            val message_parts = sms_manager.divideMessage(content)
+
+            if (message_parts.size > 1) {
+                /* Send multipart SMS for long messages */
+                sms_manager.sendMultipartTextMessage(phone_number, null, message_parts, null, null)
+                Log.d("66text", "Multipart SMS sent to $phone_number (SIM used: ${if (sim_subscription_id != -1) sim_subscription_id else "default"})")
+            } else {
+                /* Send normal SMS */
+                sms_manager.sendTextMessage(phone_number, null, content, null, null)
+                Log.d("66text", "Single-part SMS sent to $phone_number (SIM used: ${if (sim_subscription_id != -1) sim_subscription_id else "default"})")
+            }
+
             update_sms_status(sms_id, "sent", null) /* update status to sent */
-        } catch (e: Exception) {
-            Log.e("66text", "Failed to send SMS: ${e.message}")
-            update_sms_status(sms_id, "failed", e.message)
+        } catch (exception: SecurityException) {
+            Log.e("66text", "SEND_SMS permission denied: ${exception.message}")
+            update_sms_status(sms_id, "failed", "Permission denied")
+        } catch (exception: Exception) {
+            Log.e("66text", "Failed to send SMS: ${exception.message}")
+            update_sms_status(sms_id, "failed", exception.message)
         }
     }
 

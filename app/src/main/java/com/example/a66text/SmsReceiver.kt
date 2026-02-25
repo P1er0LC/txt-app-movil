@@ -43,18 +43,38 @@ class SmsReceiver : BroadcastReceiver() {
             if (bundle != null) {
                 try {
                     val pdus = bundle.get("pdus") as Array<*>
+                    val sms_messages = mutableListOf<SmsMessage>()
 
-                    /* For each message, parse sender and body */
+                    /* Collect all message parts */
                     for (pdu in pdus) {
-                        val sms_message = SmsMessage.createFromPdu(pdu as ByteArray)
-                        val phone_number = sms_message.displayOriginatingAddress
-                        val content = sms_message.displayMessageBody
+                        sms_messages.add(SmsMessage.createFromPdu(pdu as ByteArray))
+                    }
 
-                        /* Try to get the SIM subscription_id for this SMS message (API 19+) */
+                    if (sms_messages.isNotEmpty()) {
+                        /* Sort parts by sequence to keep correct order */
+                        sms_messages.sortBy { it.indexOnIcc }
+
+                        val phone_number = sms_messages[0].displayOriginatingAddress
+
+                        /* Merge all parts into a single string */
+                        val full_message = StringBuilder()
+                        for (message_part in sms_messages) {
+                            full_message.append(message_part.messageBody)
+                        }
+
+                        /* Get SIM subscription id (API 19+) */
                         val subscription_id = intent.extras?.getInt("subscription", -1) ?: -1
 
-                        /* Send the parsed SMS to the API endpoint */
-                        send_sms_to_api(context, site_url, api_key, device_id, phone_number, content, subscription_id)
+                        /* Send the complete merged message to the API */
+                        send_sms_to_api(
+                            context,
+                            site_url,
+                            api_key,
+                            device_id,
+                            phone_number,
+                            full_message.toString(),
+                            subscription_id
+                        )
                     }
                 } catch (exception: Exception) {
                     Log.e("66text", "SMS parsing failed: ${exception.message}")

@@ -4,15 +4,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/white">
+    android:background="@color/chatwoot_background">
 
     <androidx.cardview.widget.CardView
         android:id="@+id/login_card"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_margin="24dp"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="8dp"
+        app:cardBackgroundColor="@color/chatwoot_card"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="4dp"
         app:cardUseCompatPadding="true"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -23,24 +24,25 @@
             android:orientation="vertical"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="16dp">
+            android:padding="24dp">
 
             <TextView
                 android:id="@+id/text_login_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Connect"
+                android:text="Conectar con ChatBuho"
                 android:textStyle="bold"
-                android:textSize="16sp" />
+                android:textSize="24sp"
+                android:textColor="@color/chatwoot_text_primary" />
 
             <TextView
                 android:id="@+id/text_login_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Enter your details to continue"
-                android:textSize="12sp"
-                android:textColor="#66000000" />
+                android:layout_marginTop="8dp"
+                android:text="Ingresa tu ID de Dispositivo para continuar"
+                android:textSize="14sp"
+                android:textColor="@color/chatwoot_text_secondary" />
 
             <EditText
                 android:id="@+id/api_key_input"
@@ -50,7 +52,8 @@
                 android:hint="API Key"
                 android:inputType="text"
                 android:background="@drawable/rounded_edittext"
-                android:padding="12dp" />
+                android:padding="12dp"
+                android:visibility="gone" />
 
             <EditText
                 android:id="@+id/site_url_input"
@@ -60,28 +63,34 @@
                 android:hint="Site URL"
                 android:inputType="textUri"
                 android:background="@drawable/rounded_edittext"
-                android:padding="12dp" />
+                android:padding="12dp"
+                android:visibility="gone" />
 
             <EditText
                 android:id="@+id/device_id_input"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="Device ID"
+                android:layout_marginTop="24dp"
+                android:hint="ID de Dispositivo"
                 android:inputType="text"
                 android:background="@drawable/rounded_edittext"
-                android:padding="12dp" />
+                android:padding="16dp"
+                android:textSize="16sp"
+                android:textColor="@color/chatwoot_text_primary"
+                android:textColorHint="@color/chatwoot_text_secondary" />
 
             <Button
                 android:id="@+id/connect_button"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="16dp"
-                android:padding="12dp"
-                android:text="Connect"
+                android:layout_height="56dp"
+                android:layout_marginTop="24dp"
+                android:padding="16dp"
+                android:text="Conectar"
                 android:textAllCaps="false"
-                android:backgroundTint="?attr/colorPrimary"
-                android:textColor="@android:color/black" />
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:backgroundTint="@color/chatwoot_primary"
+                android:textColor="@color/white" />
 
         </LinearLayout>
     </androidx.cardview.widget.CardView>

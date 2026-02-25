@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme._66text" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme._66text" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/chatwoot_primary</item>
+        <item name="android:colorPrimaryDark">@color/chatwoot_primary_dark</item>
+        <item name="android:colorAccent">@color/chatwoot_primary</item>
+        <item name="android:windowBackground">@color/chatwoot_background</item>
+        <item name="android:textColorPrimary">@color/chatwoot_text_primary</item>
+        <item name="android:statusBarColor">@color/chatwoot_dark</item>
+        <item name="android:navigationBarColor">@color/chatwoot_dark</item>
+    </style>
 </resources>

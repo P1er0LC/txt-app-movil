@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Chatwoot colors -->
+    <color name="chatwoot_primary">#1f93ff</color>
+    <color name="chatwoot_primary_dark">#1976D2</color>
+    <color name="chatwoot_dark">#1f2d3d</color>
+    <color name="chatwoot_background">#f4f6fb</color>
+    <color name="chatwoot_success">#44ce4b</color>
+    <color name="chatwoot_card">#FFFFFF</color>
+    <color name="chatwoot_text_primary">#1f2d3d</color>
+    <color name="chatwoot_text_secondary">#6B7280</color>
+    
+    <!-- Legacy colors -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>

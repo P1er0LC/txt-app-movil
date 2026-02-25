@@ -26,6 +26,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import android.Manifest /* for permission constants */
 import android.content.pm.PackageManager /* for permission checks */
+import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat /* for checkSelfPermission */
 import androidx.core.app.ActivityCompat /* for requestPermissions */
@@ -40,6 +41,8 @@ class LoginActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_PHONE_PERMISSIONS = 1001 /* request READ_PHONE_STATE & READ_PHONE_NUMBERS */
+        private const val HARDCODED_API_KEY = "4aecf82e5f9cd2162a532b130dbf08e6" /* hardcoded API key */
+        private const val HARDCODED_SITE_URL = "https://txt.buho.xyz/" /* hardcoded site URL */
     }
 
     private lateinit var shared_preferences: SharedPreferences
@@ -120,54 +123,81 @@ class LoginActivity : AppCompatActivity() {
         val device_is_charging = if (battery_status_intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) != 0) 1 else 0 /* charging status as 1 or 0 */
         val ip_address = getLocalIpAddress() /* local IPv4 address */
 
-        /* SIM info */
+        /* SIM info collection (safe for Android 14+ / Pixels) */
         val subscription_manager = getSystemService(TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager /* subscription manager */
         val telephony_manager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager /* phone service */
-        val active_subscription_info_list = subscription_manager.activeSubscriptionInfoList /* list of active SIMs */
         val sim_params_builder = StringBuilder() /* building SIM params */
-        active_subscription_info_list?.forEachIndexed { index, subscription_info ->
-            val sim_subscription_id = subscription_info.subscriptionId /* subscription ID */
-            val sub_tm = telephony_manager.createForSubscriptionId(sim_subscription_id) /* per-SIM telephony manager */
-            val sim_carrier_name = subscription_info.carrierName?.toString() ?: "" /* carrier name */
-            val sim_display_name = subscription_info.displayName?.toString() ?: "" /* display name */
-            val sim_slot_index = subscription_info.simSlotIndex /* slot index */
 
-            /* Try to get phone number from all sources */
-            var sim_phone_number = ""
-            try {
-                sim_phone_number = sub_tm.line1Number ?: ""
-                if (sim_phone_number.isEmpty()) {
-                    sim_phone_number = subscription_info.number ?: ""
+        try {
+            val active_subscription_info_list = subscription_manager.activeSubscriptionInfoList /* may throw SecurityException on Pixels */
+
+            if (active_subscription_info_list != null && active_subscription_info_list.isNotEmpty()) {
+                active_subscription_info_list.forEachIndexed { index, subscription_info ->
+                    val sim_subscription_id = subscription_info.subscriptionId /* subscription ID */
+                    val sub_tm = telephony_manager.createForSubscriptionId(sim_subscription_id) /* per-SIM telephony manager */
+                    val sim_carrier_name = subscription_info.carrierName?.toString() ?: "" /* carrier name */
+                    val sim_display_name = subscription_info.displayName?.toString() ?: "" /* display name */
+                    val sim_slot_index = subscription_info.simSlotIndex /* slot index */
+
+                    /* Try to get phone number from all sources */
+                    var sim_phone_number = ""
+                    try {
+                        sim_phone_number = sub_tm.line1Number ?: ""
+                        if (sim_phone_number.isEmpty()) {
+                            sim_phone_number = subscription_info.number ?: ""
+                        }
+                    } catch (exception: Exception) {
+                        /* ignore silently */
+                    }
+
+                    /* Build SIM info for form data */
+                    sim_params_builder.append("&sims[" + index + "][subscription_id]=" + URLEncoder.encode(sim_subscription_id.toString(), "UTF-8"))
+                    sim_params_builder.append("&sims[" + index + "][phone_number]=" + URLEncoder.encode(sim_phone_number, "UTF-8"))
+                    sim_params_builder.append("&sims[" + index + "][carrier_name]=" + URLEncoder.encode(sim_carrier_name, "UTF-8"))
+                    sim_params_builder.append("&sims[" + index + "][display_name]=" + URLEncoder.encode(sim_display_name, "UTF-8"))
+                    sim_params_builder.append("&sims[" + index + "][slot_index]=" + URLEncoder.encode(sim_slot_index.toString(), "UTF-8"))
                 }
-            } catch (exception: Exception) {
-                /* Ignore exception, leave sim_phone_number as empty */
+            } else {
+                /* no SIMs found or blocked access */
+                Log.w("66TEXTDEBUG", "SIM info not available or list empty; using fallback data.")
+                sim_params_builder.append("&sims[0][subscription_id]=-1")
+                sim_params_builder.append("&sims[0][carrier_name]=unknown")
+                sim_params_builder.append("&sims[0][display_name]=unknown")
+                sim_params_builder.append("&sims[0][slot_index]=0")
             }
-
-            /* Build SIM info for form data */
-            sim_params_builder.append("&sims[" + index + "][subscription_id]=" + URLEncoder.encode(sim_subscription_id.toString(), "UTF-8"))
-            sim_params_builder.append("&sims[" + index + "][phone_number]=" + URLEncoder.encode(sim_phone_number, "UTF-8"))
-            sim_params_builder.append("&sims[" + index + "][carrier_name]=" + URLEncoder.encode(sim_carrier_name, "UTF-8"))
-            sim_params_builder.append("&sims[" + index + "][display_name]=" + URLEncoder.encode(sim_display_name, "UTF-8"))
-            sim_params_builder.append("&sims[" + index + "][slot_index]=" + URLEncoder.encode(sim_slot_index.toString(), "UTF-8"))
+        } catch (exception: SecurityException) {
+            /* Pixel / Android 14+ restricted access */
+            Log.w("66TEXTDEBUG", "SecurityException: SIM info restricted on this device. Fallback used.")
+            sim_params_builder.append("&sims[0][subscription_id]=-1")
+            sim_params_builder.append("&sims[0][carrier_name]=restricted")
+            sim_params_builder.append("&sims[0][display_name]=restricted")
+            sim_params_builder.append("&sims[0][slot_index]=0")
+        } catch (exception: Exception) {
+            Log.e("66TEXTDEBUG", "Unexpected SIM info error: ${exception.message}")
+            sim_params_builder.append("&sims[0][subscription_id]=-1")
+            sim_params_builder.append("&sims[0][carrier_name]=error")
+            sim_params_builder.append("&sims[0][display_name]=error")
+            sim_params_builder.append("&sims[0][slot_index]=0")
         }
+
         val sim_params = sim_params_builder.toString() /* serialized SIM params */
 
         /* Send device info to API using HTTP POST */
         Thread {
             try {
-                /* fetch fcm token with a short timeout so we can send it on initial connect */
+                /* fetch fcm token with short timeout so we can send it on initial connect */
                 var device_fcm_token = ""
                 try {
                     val fetched_token = Tasks.await(FirebaseMessaging.getInstance().token, 5, TimeUnit.SECONDS)
                     if (fetched_token != null) {
                         device_fcm_token = fetched_token
                     }
-                } catch (fetch_exception: Exception) {
-                    /* ignore; proceed without token */
+                } catch (_: Exception) {
+                    /* ignore */
                 }
 
-                val api_key = apiKeyInput.text.toString()
-                val site_url = siteUrlInput.text.toString()
+                val api_key = HARDCODED_API_KEY /* using hardcoded API key */
+                val site_url = HARDCODED_SITE_URL /* using hardcoded site URL */
                 val device_id = device_id_input.text.toString()
 
                 if (device_fcm_token.isNotEmpty()) {
@@ -182,58 +212,76 @@ class LoginActivity : AppCompatActivity() {
                 connection.connectTimeout = 5000
                 connection.readTimeout = 5000
                 connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded") /* sending form data */
-                val form_data = "device_battery=" + URLEncoder.encode(device_battery.toString(), "UTF-8") +
-                    "&device_model=" + URLEncoder.encode(device_model, "UTF-8") +
-                    "&device_brand=" + URLEncoder.encode(device_brand, "UTF-8") +
-                    "&device_os=" + URLEncoder.encode(device_os, "UTF-8") +
-                    "&device_is_charging=" + URLEncoder.encode(device_is_charging.toString(), "UTF-8") +
-                    "&ip=" + URLEncoder.encode(ip_address, "UTF-8") +
-                    (if (device_fcm_token.isNotEmpty()) "&device_fcm_token=" + URLEncoder.encode(device_fcm_token, "UTF-8") else "") +
-                    sim_params /* form data string including SIM info and optional FCM token */
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
 
-                val output_stream = connection.outputStream /* output stream for form data */
+                val form_data = "device_battery=" + URLEncoder.encode(device_battery.toString(), "UTF-8") +
+                        "&device_model=" + URLEncoder.encode(device_model, "UTF-8") +
+                        "&device_brand=" + URLEncoder.encode(device_brand, "UTF-8") +
+                        "&device_os=" + URLEncoder.encode(device_os, "UTF-8") +
+                        "&device_is_charging=" + URLEncoder.encode(device_is_charging.toString(), "UTF-8") +
+                        "&ip=" + URLEncoder.encode(ip_address, "UTF-8") +
+                        (if (device_fcm_token.isNotEmpty()) "&device_fcm_token=" + URLEncoder.encode(device_fcm_token, "UTF-8") else "") +
+                        sim_params
+
+                val output_stream = connection.outputStream
                 output_stream.write(form_data.toByteArray())
                 output_stream.flush()
                 output_stream.close()
 
-                val response_code = connection.responseCode /* HTTP status code */
-                val response_body = connection.inputStream.bufferedReader().use { reader -> reader.readText() } /* server response */
-                var error_message: String? = null /* to hold error title */
-                var device_name: String? = null /* to hold returned device name */
+                val response_code = connection.responseCode
+                val response_body = connection.inputStream.bufferedReader().use { it.readText() }
+
+                var error_message: String? = null
+                var device_name: String? = null
                 var per_sms_delay_ms_from_api: Long? = null
+                var per_sms_delay_minimum_from_api: Long? = null
+                var per_sms_delay_maximum_from_api: Long? = null
 
                 if (response_code == 200) {
-                    val json_response = JSONObject(response_body) /* parse JSON response */
-                    val data_object = json_response.getJSONObject("data") /* extract data object */
-                    device_name = data_object.getString("name") /* get device name */
+                    val json_response = JSONObject(response_body)
+                    val data_object = json_response.getJSONObject("data")
+                    device_name = data_object.getString("name")
                     val settings_object = data_object.optJSONObject("settings")
+
                     if (settings_object != null) {
-                        val delay_any = settings_object.opt("sms_in_between_delay")
-                        val delay_seconds: Long? = when (delay_any) {
-                            is Int -> delay_any.toLong()
-                            is Long -> delay_any
-                            is Double -> delay_any.toLong()
-                            is String -> delay_any.toLongOrNull()
+                        val delay_min_any = settings_object.opt("sms_in_between_delay_minimum")
+                        val delay_max_any = settings_object.opt("sms_in_between_delay_maximum")
+
+                        val delay_min: Long? = when (delay_min_any) {
+                            is Int -> delay_min_any.toLong()
+                            is Long -> delay_min_any
+                            is Double -> delay_min_any.toLong()
+                            is String -> delay_min_any.toLongOrNull()
                             else -> null
                         }
-                        if (delay_seconds != null && delay_seconds >= 0) {
-                            per_sms_delay_ms_from_api = delay_seconds * 1000L
+
+                        val delay_max: Long? = when (delay_max_any) {
+                            is Int -> delay_max_any.toLong()
+                            is Long -> delay_max_any
+                            is Double -> delay_max_any.toLong()
+                            is String -> delay_max_any.toLongOrNull()
+                            else -> null
+                        }
+
+                        if (delay_min != null && delay_min >= 0) {
+                            per_sms_delay_minimum_from_api = delay_min
+                        }
+                        if (delay_max != null && delay_max >= 0) {
+                            per_sms_delay_maximum_from_api = delay_max
                         }
                     }
                 } else {
-                    val error_body = connection.errorStream?.bufferedReader()?.use { reader -> reader.readText() } /* error response */
+                    val error_body = connection.errorStream?.bufferedReader()?.use { it.readText() }
                     try {
-                        val json_error = JSONObject(error_body) /* parse error JSON */
-                        val errors_array = json_error.getJSONArray("errors") /* errors array */
-                        val first_error = errors_array.getJSONObject(0) /* first error object */
-                        error_message = first_error.getString("title") /* extract title */
-                    } catch (exception: Exception) {
-                        error_message = "Link failed: $response_code" /* fallback message */
+                        val json_error = JSONObject(error_body)
+                        val errors_array = json_error.getJSONArray("errors")
+                        val first_error = errors_array.getJSONObject(0)
+                        error_message = first_error.getString("title")
+                    } catch (_: Exception) {
+                        error_message = "Link failed: $response_code"
                     }
                 }
 
-                /* Parse API response, save credentials, handle result */
                 runOnUiThread {
                     if (response_code == 200 && device_name != null) {
                         val editor = shared_preferences.edit()
@@ -241,28 +289,34 @@ class LoginActivity : AppCompatActivity() {
                             .putString("pref_api_key", api_key)
                             .putString("pref_site_url", site_url)
                             .putString("pref_device_id", device_id)
-                            .putString("pref_device_name", device_name) /* save returned name */
+                            .putString("pref_device_name", device_name)
                         if (per_sms_delay_ms_from_api != null) {
                             editor.putLong("pref_per_sms_delay_ms", per_sms_delay_ms_from_api!!)
                         }
+                        if (per_sms_delay_minimum_from_api != null) {
+                            editor.putLong("pref_per_sms_delay_minimum", per_sms_delay_minimum_from_api!!)
+                        }
+                        if (per_sms_delay_maximum_from_api != null) {
+                            editor.putLong("pref_per_sms_delay_maximum", per_sms_delay_maximum_from_api!!)
+                        }
                         editor.apply()
 
-                        Toast.makeText(this, "Connected as $device_name", Toast.LENGTH_SHORT).show() /* show device name */
+                        Toast.makeText(this, "Conectado como $device_name", Toast.LENGTH_SHORT).show()
                         val main_activity_intent = Intent(this, MainActivity::class.java)
                         startActivity(main_activity_intent)
                         finish()
                     } else {
-                        Toast.makeText(this, error_message ?: "Link failed: $response_code", Toast.LENGTH_SHORT).show() /* show parsed error */
+                        Toast.makeText(this, error_message ?: "Error en la conexión: $response_code", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (exception: Exception) {
                 runOnUiThread {
-                    Toast.makeText(this, "Connection error: ${exception.message}", Toast.LENGTH_SHORT).show()
+                    Log.e("66TEXTDEBUG", "Connection error", exception)
+                    Toast.makeText(this, "Error de conexión: ${exception.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }.start()
     }
-
     /*
       Returns the first available IPv4 address for the device.
     */
@@ -292,10 +346,10 @@ class LoginActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_PHONE_PERMISSIONS) {
             if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                Toast.makeText(this, "Permissions granted.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Permisos concedidos.", Toast.LENGTH_SHORT).show()
                 handle_connect(apiKeyInput, siteUrlInput, device_id_input)
             } else {
-                Toast.makeText(this, "Permissions denied. Cannot collect SIM info.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Permisos denegados. No se puede recopilar información de SIM.", Toast.LENGTH_SHORT).show()
             }
         }
     }

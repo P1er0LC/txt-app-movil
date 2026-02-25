@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "521154189879",
-    "project_id": "text-android-49b96",
-    "storage_bucket": "text-android-49b96.firebasestorage.app"
+    "project_number": "123456789012",
+    "project_id": "66text-app",
+    "storage_bucket": "66text-app.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:521154189879:android:265517e06ed02ec36f3db2",
+        "mobilesdk_app_id": "1:123456789012:android:abcdef1234567890abcdef",
         "android_client_info": {
           "package_name": "com.example.a66text"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAmzqvERtdKp5Lsi97p6DLhKzfW3aPAMQ0"
+          "current_key": "AIzaSyDummyKeyForCompilation123456789"
         }
       ],
       "services": {

@@ -34,7 +34,7 @@ class MainActivity : Activity() {
             val shared_preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
             val updated_ts = shared_preferences.getLong("pref_last_poll_ts", 0L)
             findViewById<TextView>(R.id.text_last_poll).text =
-                "Last poll: ${formatTimeAgo(updated_ts)}"
+                "Última consulta: ${formatTimeAgo(updated_ts)}"
 
             poll_handler.postDelayed(this, 1000)
         }
@@ -44,15 +44,15 @@ class MainActivity : Activity() {
       Formats a timestamp as a "time ago" string.
     */
     fun formatTimeAgo(timestamp: Long): String {
-        if (timestamp == 0L) return "Never"
+        if (timestamp == 0L) return "Nunca"
         val diff = System.currentTimeMillis() - timestamp
         val seconds = diff / 1000
         val minutes = seconds / 60
         val hours = minutes / 60
         return when {
-            hours > 0 -> "$hours hour(s) ago"
-            minutes > 0 -> "$minutes minute(s) ago"
-            else -> "$seconds second(s) ago"
+            hours > 0 -> "hace $hours hora(s)"
+            minutes > 0 -> "hace $minutes minuto(s)"
+            else -> "hace $seconds segundo(s)"
         }
     }
 
@@ -69,7 +69,7 @@ class MainActivity : Activity() {
 
         /* Redirect to login screen if not authenticated */
         if (api_key.isNullOrEmpty() || site_url.isNullOrEmpty()) {
-            Toast.makeText(this, "Missing API key or site URL. Please log in.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Falta API key o URL del sitio. Por favor inicia sesión.", Toast.LENGTH_LONG).show()
             val login_intent = Intent(this, LoginActivity::class.java)
             startActivity(login_intent)
             finish()
@@ -89,17 +89,17 @@ class MainActivity : Activity() {
         val disconnect_button = findViewById<Button>(R.id.button_disconnect)
 
         /* Set device name, site URL, last poll info */
-        val device_name = shared_preferences.getString("pref_device_name", "Unknown device")
+        val device_name = shared_preferences.getString("pref_device_name", "Dispositivo desconocido")
 
-        device_name_view.text = "Device: $device_name"
+        device_name_view.text = "Dispositivo: $device_name"
         site_url_view.text = "URL: ${site_url ?: ""}"
-        last_poll_view.text = "Last poll: just now"
+        last_poll_view.text = "Última consulta: ahora"
 
         val last_poll_timestamp = shared_preferences.getLong("pref_last_poll_ts", 0L)
 
         poll_handler.post(poll_runnable)
 
-        status_value.text = "Connected"
+        status_value.text = "Conectado"
         status_value.setTextColor(getColor(android.R.color.holo_green_dark))
 
         /* Handle disconnect button click */
@@ -168,10 +168,10 @@ class MainActivity : Activity() {
 
         if (request_code == 101) {
             if (grant_results.all { it == PackageManager.PERMISSION_GRANTED }) {
-                Toast.makeText(this, "Permissions granted", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Permisos concedidos", Toast.LENGTH_SHORT).show()
                 // We'll start the foreground service + polling in the next step
             } else {
-                Toast.makeText(this, "Missing permissions", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Faltan permisos", Toast.LENGTH_LONG).show()
             }
         }
     }
