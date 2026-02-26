@@ -41,8 +41,8 @@ class LoginActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_PHONE_PERMISSIONS = 1001 /* request READ_PHONE_STATE & READ_PHONE_NUMBERS */
-        private const val HARDCODED_API_KEY = "4aecf82e5f9cd2162a532b130dbf08e6" /* hardcoded API key */
-        private const val HARDCODED_SITE_URL = "https://txt.buho.xyz/" /* hardcoded site URL */
+        private const val HARDCODED_API_KEY = "e492ae6cc1d730a28123e844f63e5b0b" /* hardcoded API key */
+        private const val HARDCODED_SITE_URL = "https://sms.buho.la/" /* hardcoded site URL */
     }
 
     private lateinit var shared_preferences: SharedPreferences
