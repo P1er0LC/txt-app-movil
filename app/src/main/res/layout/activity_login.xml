@@ -50,7 +50,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Ingresa tu ID de Dispositivo para continuar"
+                android:text="Ingresa tu Código de Dispositivo para continuar"
                 android:textSize="14sp"
                 android:textColor="@color/chatwoot_text_secondary" />
 
@@ -81,7 +81,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
-                android:hint="ID de Dispositivo"
+                android:hint="Código de Dispositivo"
                 android:inputType="text"
                 android:background="@drawable/rounded_edittext"
                 android:padding="16dp"
