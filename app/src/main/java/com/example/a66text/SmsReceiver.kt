@@ -2,131 +2,91 @@ package com.example.a66text
 
 /*
   SmsReceiver.kt
-  BroadcastReceiver to listen for incoming SMS messages and forward them to the PHP API endpoint if the app is authenticated.
+  BroadcastReceiver que recibe SMS_DELIVER (cuando somos la app SMS predeterminada).
+  Extrae el SMS del PDU, lo escribe a content://sms/inbox y pasa los datos
+  directamente a SmsService para envío inmediato al servidor.
 */
 
-/*
-  Listens for the SMS_RECEIVED broadcast and posts SMS details to the API after login.
-*/
 import android.content.BroadcastReceiver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.os.Bundle
+import android.net.Uri
+import android.os.Build
+import android.provider.Telephony
 import android.telephony.SmsMessage
 import android.util.Log
-import okhttp3.*
-import java.io.IOException
 
 class SmsReceiver : BroadcastReceiver() {
 
-    /*
-      Called automatically when an SMS is received.
-      Checks for valid API configuration and forwards SMS if authenticated.
-    */
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == "android.provider.Telephony.SMS_RECEIVED") {
+        val action = intent.action ?: return
+        if (action != "android.provider.Telephony.SMS_DELIVER" &&
+            action != "android.provider.Telephony.SMS_RECEIVED") return
 
-            /* Get the saved API config from SharedPreferences */
-            val shared_preferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            val api_key = shared_preferences.getString("pref_api_key", "")
-            val site_url = shared_preferences.getString("pref_site_url", "")
-            val device_id = shared_preferences.getString("pref_device_id", "")
+        Log.d("66text", "SmsReceiver ($action): procesando PDU...")
 
-            /* Abort if API config is missing (not logged in) */
-            if (api_key.isNullOrEmpty() || site_url.isNullOrEmpty() || device_id.isNullOrEmpty()) {
-                Log.d("66text", "No API config, will not send incoming SMS to server")
-                return
-            }
+        /* Extraer PDUs del intent */
+        val format = intent.getStringExtra("format") ?: "3gpp"
+        val sub_id = intent.getIntExtra("subscription", -1)
+            .takeIf { it > 0 } ?: 1
 
-            /* Extract SMS messages from the broadcast intent */
-            val bundle: Bundle? = intent.extras
-            if (bundle != null) {
-                try {
-                    val pdus = bundle.get("pdus") as Array<*>
-                    val sms_messages = mutableListOf<SmsMessage>()
+        @Suppress("DEPRECATION")
+        val pdus = (intent.extras?.get("pdus") as? Array<*>)
+            ?.filterIsInstance<ByteArray>() ?: emptyList()
 
-                    /* Collect all message parts */
-                    for (pdu in pdus) {
-                        sms_messages.add(SmsMessage.createFromPdu(pdu as ByteArray))
-                    }
+        if (pdus.isEmpty()) {
+            Log.w("66text", "SmsReceiver: PDUs vacíos, despertando SmsService por si acaso")
+            context.startService(Intent(context, SmsService::class.java))
+            return
+        }
 
-                    if (sms_messages.isNotEmpty()) {
-                        /* Sort parts by sequence to keep correct order */
-                        sms_messages.sortBy { it.indexOnIcc }
-
-                        val phone_number = sms_messages[0].displayOriginatingAddress
-
-                        /* Merge all parts into a single string */
-                        val full_message = StringBuilder()
-                        for (message_part in sms_messages) {
-                            full_message.append(message_part.messageBody)
-                        }
-
-                        /* Get SIM subscription id (API 19+) */
-                        val subscription_id = intent.extras?.getInt("subscription", -1) ?: -1
-
-                        /* Send the complete merged message to the API */
-                        send_sms_to_api(
-                            context,
-                            site_url,
-                            api_key,
-                            device_id,
-                            phone_number,
-                            full_message.toString(),
-                            subscription_id
-                        )
-                    }
-                } catch (exception: Exception) {
-                    Log.e("66text", "SMS parsing failed: ${exception.message}")
-                }
+        /* Construir mensajes a partir de los PDUs */
+        val messages = pdus.map { pdu ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                SmsMessage.createFromPdu(pdu, format)
+            } else {
+                @Suppress("DEPRECATION")
+                SmsMessage.createFromPdu(pdu)
             }
         }
-    }
 
-    /*
-      Sends the SMS data to the PHP API endpoint using OkHttp.
-    */
-    private fun send_sms_to_api(context: Context, site_url: String, api_key: String, device_id: String, phone_number: String, content: String, subscription_id: Int) {
+        val phone_number = messages.firstOrNull()?.originatingAddress ?: ""
+        val body = messages.joinToString("") { it.messageBody ?: "" }
+        val timestamp = messages.firstOrNull()?.timestampMillis ?: System.currentTimeMillis()
 
-        /* Get battery info */
-        val battery_manager = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
-        val device_battery = battery_manager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
-        val battery_status_intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
-        val device_is_charging = if (battery_status_intent?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, -1) != 0) 1 else 0
+        Log.d("66text", "SMS de $phone_number: $body (sub_id=$sub_id)")
 
-        /* Build the URL for the API endpoint */
-        val url = "${site_url}api/sms/receive"
-        val client = OkHttpClient()
-
-        /* Build the form data for the POST request */
-        val form_body = FormBody.Builder()
-            .add("device_id", device_id)
-            .add("phone_number", phone_number)
-            .add("content", content)
-            .add("sim_subscription_id", subscription_id.toString())
-            .add("device_battery", device_battery.toString())
-            .add("device_is_charging", device_is_charging.toString())
-            .build()
-
-        /* Build and send the POST request asynchronously */
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer $api_key")
-            .post(form_body)
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-
-            /* Handle failure to send */
-            override fun onFailure(call: Call, exception: IOException) {
-                Log.e("66text", "Failed to send SMS to API: ${exception.message}")
+        /* Escribir a content://sms/inbox (requerido cuando somos la app SMS predeterminada) */
+        var inserted_sms_id = -1L
+        if (action == "android.provider.Telephony.SMS_DELIVER") {
+            try {
+                val values = ContentValues().apply {
+                    put(Telephony.Sms.ADDRESS, phone_number)
+                    put(Telephony.Sms.BODY, body)
+                    put(Telephony.Sms.DATE, timestamp)
+                    put(Telephony.Sms.DATE_SENT, timestamp)
+                    put(Telephony.Sms.READ, 0)
+                    put(Telephony.Sms.SEEN, 0)
+                    put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_INBOX)
+                    put(Telephony.Sms.SUBSCRIPTION_ID, sub_id)
+                }
+                val uri = context.contentResolver.insert(Uri.parse("content://sms/inbox"), values)
+                inserted_sms_id = uri?.lastPathSegment?.toLongOrNull() ?: -1L
+                Log.d("66text", "SMS escrito a content://sms/inbox → $uri (id=$inserted_sms_id)")
+            } catch (ex: Exception) {
+                Log.e("66text", "Error escribiendo SMS a content://sms: ${ex.message}")
             }
+        }
 
-            /* Handle successful response */
-            override fun onResponse(call: Call, response: Response) {
-                Log.d("66text", "Sent incoming SMS to API, code: ${response.code}")
-                response.close()
-            }
-        })
+        /* Iniciar SmsService pasando los datos del SMS para procesado inmediato */
+        val service_intent = Intent(context, SmsService::class.java).apply {
+            putExtra("action", "receive_sms")
+            putExtra("phone_number", phone_number)
+            putExtra("body", body)
+            putExtra("sub_id", sub_id)
+            putExtra("sms_db_id", inserted_sms_id)
+        }
+        context.startService(service_intent)
     }
 }

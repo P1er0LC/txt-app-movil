@@ -10,7 +10,10 @@ import kotlin.concurrent.timerTask
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
+import android.app.role.RoleManager
 import android.os.Bundle
+import android.provider.Telephony
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
@@ -35,6 +38,19 @@ class MainActivity : Activity() {
             val updated_ts = shared_preferences.getLong("pref_last_poll_ts", 0L)
             findViewById<TextView>(R.id.text_last_poll).text =
                 "Última consulta: ${formatTimeAgo(updated_ts)}"
+
+            val last_received_phone = shared_preferences.getString("pref_last_received_phone", null)
+            val last_received_ts = shared_preferences.getLong("pref_last_received_ts", 0L)
+            val last_sent_phone = shared_preferences.getString("pref_last_sent_phone", null)
+            val last_sent_ts = shared_preferences.getLong("pref_last_sent_ts", 0L)
+
+            findViewById<TextView>(R.id.text_last_received).text =
+                if (last_received_phone != null) "$last_received_phone · ${formatTimeAgo(last_received_ts)}"
+                else "Ninguno aún"
+
+            findViewById<TextView>(R.id.text_last_sent).text =
+                if (last_sent_phone != null) "$last_sent_phone · ${formatTimeAgo(last_sent_ts)}"
+                else "Ninguno aún"
 
             poll_handler.postDelayed(this, 1000)
         }
@@ -140,6 +156,31 @@ class MainActivity : Activity() {
     }
 
     /*
+      Verifica si somos la app SMS predeterminada y muestra el diálogo del sistema para serlo.
+      Cuando somos la default, Google Messages del remitente cae a SMS tradicional (sin RCS).
+    */
+    private fun prompt_set_default_sms_app() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val role_manager = getSystemService(RoleManager::class.java)
+                if (!role_manager.isRoleHeld(RoleManager.ROLE_SMS)) {
+                    val role_intent = role_manager.createRequestRoleIntent(RoleManager.ROLE_SMS)
+                    startActivityForResult(role_intent, 200)
+                }
+            } else {
+                val default_pkg = Telephony.Sms.getDefaultSmsPackage(this)
+                if (default_pkg != packageName) {
+                    val change_intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
+                    change_intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName)
+                    startActivityForResult(change_intent, 200)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("66text", "No se pudo solicitar app SMS predeterminada: ${e.message}")
+        }
+    }
+
+    /*
       Requests necessary SMS and phone permissions.
     */
     private fun request_sms_permission() {
@@ -148,7 +189,8 @@ class MainActivity : Activity() {
             Manifest.permission.READ_SMS,
             Manifest.permission.RECEIVE_SMS,
             Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.READ_PHONE_NUMBERS
+            Manifest.permission.READ_PHONE_NUMBERS,
+            Manifest.permission.READ_CONTACTS
         )
 
         val missing_permissions = permissions.filter {
@@ -176,9 +218,27 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 200) {
+            if (resultCode == RESULT_OK) {
+                Log.d("66text", "App establecida como SMS predeterminada correctamente")
+                Toast.makeText(this, "66text es ahora la app SMS predeterminada", Toast.LENGTH_SHORT).show()
+            } else {
+                Log.w("66text", "Usuario rechazó ser app SMS predeterminada")
+            }
+        }
+    }
+
     /*
       Cleans up poll handler on activity destroy.
     */
+    override fun onResume() {
+        super.onResume()
+        /* Pedir ser la app SMS predeterminada al volver al foco (elimina RCS) */
+        prompt_set_default_sms_app()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         /* Remove poll handler callbacks */

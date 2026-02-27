@@ -88,11 +88,15 @@ class LoginActivity : AppCompatActivity() {
             val has_read_phone_state = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
             val has_read_phone_numbers = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_NUMBERS) == PackageManager.PERMISSION_GRANTED
             val has_send_sms = ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+            val has_receive_sms = ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+            val has_read_sms = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
             val needs_post_notifications = Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
 
             if (!has_read_phone_state) { needed_permissions.add(Manifest.permission.READ_PHONE_STATE) }
             if (!has_read_phone_numbers) { needed_permissions.add(Manifest.permission.READ_PHONE_NUMBERS) }
             if (!has_send_sms) { needed_permissions.add(Manifest.permission.SEND_SMS) }
+            if (!has_receive_sms) { needed_permissions.add(Manifest.permission.RECEIVE_SMS) }
+            if (!has_read_sms) { needed_permissions.add(Manifest.permission.READ_SMS) }
             if (needs_post_notifications) { needed_permissions.add(Manifest.permission.POST_NOTIFICATIONS) }
 
             if (needed_permissions.isNotEmpty()) {
