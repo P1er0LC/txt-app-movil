@@ -235,6 +235,7 @@ class LoginActivity : AppCompatActivity() {
                 val response_code = connection.responseCode
                 val response_body = connection.inputStream.bufferedReader().use { it.readText() }
 
+                var actual_device_id: String? = null
                 var error_message: String? = null
                 var device_name: String? = null
                 var per_sms_delay_ms_from_api: Long? = null
@@ -244,6 +245,7 @@ class LoginActivity : AppCompatActivity() {
                 if (response_code == 200) {
                     val json_response = JSONObject(response_body)
                     val data_object = json_response.getJSONObject("data")
+                    actual_device_id = data_object.getInt("id").toString()
                     device_name = data_object.getString("name")
                     val settings_object = data_object.optJSONObject("settings")
 
@@ -292,7 +294,7 @@ class LoginActivity : AppCompatActivity() {
                         editor
                             .putString("pref_api_key", api_key)
                             .putString("pref_site_url", site_url)
-                            .putString("pref_device_id", device_id)
+                            .putString("pref_device_id", actual_device_id)
                             .putString("pref_device_name", device_name)
                         if (per_sms_delay_ms_from_api != null) {
                             editor.putLong("pref_per_sms_delay_ms", per_sms_delay_ms_from_api!!)
